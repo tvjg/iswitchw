@@ -1,4 +1,4 @@
-﻿#NoEnv  ; Recommended for performance and compatibility with future AutoHotkey releases.
+#NoEnv  ; Recommended for performance and compatibility with future AutoHotkey releases.
 ; #Warn  ; Enable warnings to assist with detecting common errors.
 SendMode Input  ; Recommended for new scripts due to its superior speed and reliability.
 SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
@@ -119,7 +119,8 @@ dynamicwindowlist =
 ; 
 ; set this to blank if you don't want a sound 
 ; 
-nomatchsound = %windir%\Media\ding.wav 
+; nomatchsound = %windir%\Media\ding.wav 
+nomatchsound =  
 
 if nomatchsound <> 
     ifnotexist, %nomatchsound% 
@@ -147,13 +148,12 @@ if nomatchsound <>
 
 AutoTrim, off 
 
-;this section modified by ezuk, 03 July 2008
-Gui, +LastFound +AlwaysOnTop -Caption   
+Gui, +LastFound +AlwaysOnTop -Caption +ToolWindow 
 Gui, Color, black,black
-WinSet, Transparent, 180
-Gui,Font,s30 cYellow bold,Calibri
-Gui, Add, ListBox, vindex gListBoxClick x-2 y-2 w810 h602 AltSubmit -VScroll
-;end of modifications by ezuk
+WinSet, Transparent, 225
+Gui,Font,s16 cEEE8D5 bold,Consolas
+Gui,Margin,1,1
+Gui, Add, ListBox, vindex gListBoxClick w800 h600 AltSubmit -VScroll
 
 if filterlist <> 
 { 
@@ -165,9 +165,9 @@ if filterlist <>
 
 ;---------------------------------------------------------------------- 
 ; 
-; I never use the CapsLock key, that's why I chose it. 
+; Win+space to activate. 
 ; 
-CapsLock:: 
+#space::
 
 search = 
 numallwin = 0 
@@ -177,7 +177,7 @@ GoSub, RefreshWindowList
 WinGet, orig_active_id, ID, A 
 prev_active_id = %orig_active_id% 
 
-Gui, Show, Center h600 w800, Window Switcher 
+Gui, Show, Center, Window Switcher 
 ; If we determine the ID of the switcher window here then 
 ; why doesn't it appear in the window list when the script is 
 ; run the first time? (Note that RefreshWindowList has already 
@@ -740,3 +740,4 @@ ifwinnotactive, ahk_id %switcher_id%
     send, {esc} 
 
 return
+
