@@ -104,10 +104,9 @@ if activateselectioninbg <>
         exitapp 
     } 
 
-; List of subtsrings separated with pipe (|) characters (e.g. carpe|diem). 
-; Window titles containing any of the listed substrings are filtered out 
-; from the list of windows. 
-filterlist = asticky|blackbox
+; Window titles containing any of the listed substrings are filtered out from
+; the list of windows. 
+filters := ["asticky", "blackbox"] 
 
 ; Set this yes to update the list of windows every time the contents of the 
 ; listbox is updated. This is usually not necessary and it is an overhead which 
@@ -154,14 +153,6 @@ WinSet, Transparent, 225
 Gui,Font,s16 cEEE8D5 bold,Consolas
 Gui,Margin,1,1
 Gui, Add, ListBox, vindex gListBoxClick w800 h600 AltSubmit -VScroll
-
-if filterlist <> 
-{ 
-    loop, parse, filterlist, | 
-    { 
-        filters%a_index% = %A_LoopField% 
-    } 
-} 
 
 ;---------------------------------------------------------------------- 
 ; 
@@ -306,6 +297,23 @@ Gosub, CleanExit
 
 return 
 
+  ; Unoptimized array search, returns index of first occurrence or -1 
+IncludedIn(haystack,needle)
+{
+  Loop % haystack.MaxIndex()
+  {
+    item := haystack[a_index]
+    StringTrimRight, item, item, 0
+    if item =
+      continue
+
+    IfInString, needle, %item%
+      return %a_index%
+  }
+
+  return -1
+}
+
 ;---------------------------------------------------------------------- 
 ; 
 ; Refresh the list of windows according to the search criteria 
@@ -350,26 +358,8 @@ RefreshWindowList:
             } 
 
             ; don't add titles which match any of the filters 
-            if filterlist <> 
-            { 
-                filtered = 
-
-                loop 
-                { 
-                    stringtrimright, filter, filters%a_index%, 0 
-                    if filter = 
-                      break 
-                    else 
-                        ifinstring, title, %filter% 
-                        { 
-                           filtered = yes 
-                           break 
-                        } 
-                } 
-
-                if filtered = yes 
-                    continue 
-            } 
+            if IncludedIn(filters, title) > -1
+              continue
 
             ; replace pipe (|) characters in the window title, 
             ; because Gui Add uses it for separating listbox items 
