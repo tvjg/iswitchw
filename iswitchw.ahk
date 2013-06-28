@@ -432,27 +432,6 @@ RefreshWindowList:
         winarray%numwin% = %title% 
     } 
 
-    ; if the pattern didn't match any window 
-    if numwin = 0 
-        ; if the search string is empty then we can't do much 
-        if search = 
-        { 
-            Gui, cancel 
-            Gosub, CleanExit 
-        } 
-        ; delete the last character 
-        else 
-        { 
-            if nomatchsound <> 
-                SoundPlay, %nomatchsound% 
-
-            GoSub, DeleteSearchChar 
-            return 
-        } 
-
-    ; sort the list alphabetically 
-    Sort, winlist, D| 
-
     ; add digit shortcuts if there are ten or less windows 
     ; in the list and digit shortcuts are enabled 
     if digitshortcuts <> 
