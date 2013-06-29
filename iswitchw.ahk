@@ -29,9 +29,6 @@ SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 ; 
 ; The window selection can be cancelled with Esc. 
 ; 
-; The switcher window can be moved horizontally with the left/right 
-; arrow keys if it blocks the view of windows under it. 
-; 
 ; The switcher can also be operated with the mouse, although it is 
 ; meant to be used from the keyboard. A mouse click activates the 
 ; currently selected window. Mouse users may want to change the 
@@ -233,15 +230,11 @@ Loop
 
     if ErrorLevel = EndKey:left 
     { 
-        direction = -1 
-        GoSuB MoveSwitcher 
         continue 
     } 
 
     if ErrorLevel = EndKey:right 
     { 
-        direction = 1 
-        GoSuB MoveSwitcher 
         continue 
     } 
 
@@ -537,35 +530,6 @@ ListViewClick:
 if (A_GuiControlEvent = "Normal"
     and !GetKeyState("Down", "P") and !GetKeyState("Up", "P"))
     send, {enter} 
-return 
-
-;---------------------------------------------------------------------- 
-; 
-; Move switcher window horizontally 
-; 
-; Input: direction - 1 for right, -1 for left 
-; 
-MoveSwitcher: 
-
-direction *= 100 
-WinGetPos, x, y, width, , ahk_id %switcher_id% 
-x += %direction% 
-
-if x < 0 
-    x = 0 
-else 
-{ 
-   SysGet screensize, MonitorWorkArea 
-   screensizeRight -= %width% 
-   if x > %screensizeRight% 
-      x = %screensizeRight% 
-} 
-
-prevdelay = %A_WinDelay% 
-SetWinDelay, -1 
-WinMove, ahk_id %switcher_id%, , %x%, %y% 
-SetWinDelay, %prevdelay% 
-
 return 
 
 ;---------------------------------------------------------------------- 
