@@ -6,18 +6,26 @@ SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 ; 
 ; iswitchw - Incrementally switch between windows using substrings
 ;
+; [CREATED by keyboardfreak, 10 October 2004] 
+;     http://www.autohotkey.com/forum/viewtopic.php?t=1040
+;
 ; [MODIFIED by ezuk, 3 July 2008, changes noted below. Cosmetics only.] 
-; 
-; Required AutoHotkey version: 1.0.25+ 
+;     http://www.autohotkey.com/forum/viewtopic.php?t=33353;
+;
+; [MODIFIED by jixiuf@gmail.com, 3 July 2008] 
+;     https://github.com/jixiuf/my_autohotkey_scripts/blob/master/ahk_scripts/iswitchw-plus.ahk
+;
+; [MODIFIED by dirtyrottenscoundrel, 28 June 2013] 
+;     FIXME: Publish to Github 
+;
+; Using AutoHotkey version: 1.1.11.01 
 ; 
 ; When this script is triggered via its hotkey the list of titles of 
 ; all visible windows appears. The list can be narrowed quickly to a 
 ; particular window by typing a substring of a window title. 
 ; 
 ; When the list is narrowed the desired window can be selected using 
-; the cursor keys and Enter. If the substring matches exactly one 
-; window that window is activated immediately (configurable, see the 
-; "autoactivateifonlyone" variable). 
+; the cursor keys and Enter. 
 ; 
 ; The window selection can be cancelled with Esc. 
 ; 
@@ -29,20 +37,6 @@ SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 ; currently selected window. Mouse users may want to change the 
 ; activation key to one of the mouse keys. 
 ; 
-; If enabled possible completions are offered when the same unique 
-; substring is found in the title of more than one window. 
-; 
-; For example, the user typed the string "co" and the list is 
-; narrowed to two windows: "Windows Commander" and "Command Prompt". 
-; In this case the "command" substring can be completed automatically, 
-; so the script offers this completion in square brackets which the 
-; user can accept with the TAB key: 
-; 
-;     co[mmand] 
-; 
-; This feature can be confusing for novice users, so it is disabled 
-; by default. 
-; 
 ; 
 ; For the idea of this script the credit goes to the creators of the 
 ; iswitchb package for the Emacs editor 
@@ -52,14 +46,6 @@ SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 ; 
 ; User configuration 
 ; 
-
-; set this to yes if you want to select the only matching window 
-; automatically 
-autoactivateifonlyone = 
-
-; set this to yes if you want to enable tab completion (see above) 
-; it has no effect if firstlettermatch (see below) is enabled 
-tabcompletion = 
 
 ; set this to yes to enable digit shortcuts when there are ten or 
 ; less items in the list 
@@ -88,9 +74,6 @@ activateselectioninbg =
 ; if set to blank the current selection is activated immediately 
 ; without delay 
 bgactivationdelay = 300 
-
-; show process name before window title. 
-showprocessname = 
 
 ; Close switcher window if the user activates an other window. 
 ; It does not work well if activateselectioninbg is enabled, so 
@@ -130,9 +113,8 @@ if nomatchsound <>
 ; Global variables 
 ; 
 ;     numallwin      - the number of windows on the desktop 
-;     allwinarray    - array containing the titles of windows on the desktop 
-;                      dynamicwindowlist is disabled 
-;     allwinidarray  - window ids corresponding to the titles in allwinarray 
+;     allwindows     - associative array: titles of windows on desktop keyed
+;                      by window ids  
 ;     numwin         - the number of windows in the listbox 
 ;     idarray        - array containing window ids for the listbox items 
 ;     orig_active_id - the window ID of the originally active window 
@@ -152,7 +134,7 @@ Gui, Color, black,black
 WinSet, Transparent, 225
 Gui,Font,s16 cEEE8D5 bold,Consolas
 Gui,Margin,1,1
-Gui, Add, ListBox, vindex gListBoxClick w800 h600 AltSubmit -VScroll
+Gui, Add, ListView, w854 h510 -VScroll AltSubmit -Hdr -HScroll -Multi Count10 gListViewClick, index|title|proc
 
 ;---------------------------------------------------------------------- 
 ; 
@@ -322,7 +304,8 @@ IncludedIn(haystack,needle)
 ;       idarray - see the documentation of global variables 
 ; 
 RefreshWindowList: 
-    ; refresh the list of windows if necessary 
+    allwindows := Object()
+    windows := Object()
 
     if ( dynamicwindowlist = "yes" or numallwin = 0 ) 
     { 
@@ -333,29 +316,15 @@ RefreshWindowList:
         { 
             StringTrimRight, this_id, id%a_index%, 0 
             WinGetTitle, title, ahk_id %this_id% 
+            StringTrimRight, title, title, 0 
 
             ; FIXME: windows with empty titles? 
             if title = 
-                continue 
+              continue 
 
             ; don't add the switcher window 
             if switcher_id = %this_id% 
-                continue 
-
-            ; show process name if enabled 
-            if showprocessname <> 
-            { 
-                WinGet, procname, ProcessName, ahk_id %this_id% 
-
-                stringgetpos, pos, procname, . 
-                if ErrorLevel <> 1 
-                { 
-                    stringleft, procname, procname, %pos% 
-                } 
-
-                stringupper, procname, procname 
-                title = %procname%: %title% 
-            } 
+              continue 
 
             ; don't add titles which match any of the filters 
             if IncludedIn(filters, title) > -1
@@ -366,8 +335,7 @@ RefreshWindowList:
             StringReplace, title, title, |, -, all 
 
             numallwin += 1 
-            allwinarray%numallwin% = %title% 
-            allwinidarray%numallwin% = %this_id% 
+            allwindows[this_id] := title
         } 
     } 
 
@@ -376,11 +344,8 @@ RefreshWindowList:
     winlist = 
     numwin = 0 
 
-    Loop, %numallwin% 
+    For wid, title in allwindows
     { 
-        StringTrimRight, title, allwinarray%a_index%, 0 
-        StringTrimRight, this_id, allwinidarray%a_index%, 0 
-
         ; don't add the windows not matching the search string 
         ; if there is a search string 
         if search <> 
@@ -426,10 +391,10 @@ RefreshWindowList:
 
         if winlist <> 
             winlist = %winlist%| 
-        winlist = %winlist%%title%`r%this_id% 
+        winlist = %winlist%%title%`r%wid% 
 
         numwin += 1 
-        winarray%numwin% = %title% 
+        windows[wid] := title
     } 
 
     ; add digit shortcuts if there are ten or less windows 
@@ -456,105 +421,9 @@ RefreshWindowList:
             winlist = %digitlist% 
         } 
 
-    ; strip window IDs from the sorted list 
-    titlelist = 
-    arrayindex = 1 
-
-    loop, parse, winlist, | 
-    { 
-        stringgetpos, pos, A_LoopField, `r 
-
-        stringleft, title, A_LoopField, %pos% 
-        titlelist = %titlelist%|%title% 
-
-        pos += 2 ; skip the separator char 
-        stringmid, id, A_LoopField, %pos%, 10000 
-        idarray%arrayindex% = %id% 
-        ++arrayindex 
-    } 
-
-    ; show the list 
-    GuiControl,, ListBox1, %titlelist% 
-    GuiControl, Choose, ListBox1, 1 
-
-    if numwin = 1 
-        if autoactivateifonlyone <> 
-        { 
-            GoSub, ActivateWindow 
-            Gosub, CleanExit 
-        } 
+    DrawListView(windows)    
 
     GoSub ActivateWindowInBackgroundIfEnabled 
-
-    completion = 
-
-    if tabcompletion = 
-        return 
-
-    ; completion is not implemented for first letter match mode 
-    if firstlettermatch <> 
-        return 
-
-    ; determine possible completion if there is 
-    ; a search string and there are more than one 
-    ; window in the list 
-
-    if search = 
-        return 
-    
-    if numwin = 1 
-        return 
-
-    loop 
-    { 
-        nextchar = 
-
-        loop, %numwin% 
-        { 
-            stringtrimleft, title, winarray%a_index%, 0 
-
-            if nextchar = 
-            { 
-                substr = %search%%completion% 
-                stringlen, substr_len, substr 
-                stringgetpos, pos, title, %substr% 
-
-                if pos = -1 
-                    break 
-
-                pos += %substr_len% 
-
-                ; if the substring matches the end of the 
-                ; string then no more characters can be completed 
-                stringlen, title_len, title 
-                if pos >= %title_len% 
-                { 
-                    pos = -1 
-                    break 
-                } 
-
-                ; stringmid has different position semantics 
-                ; than stringgetpos. strange... 
-                pos += 1 
-                stringmid, nextchar, title, %pos%, 1 
-                substr = %substr%%nextchar% 
-             } 
-             else 
-             { 
-                stringgetpos, pos, title, %substr% 
-                if pos = -1 
-                    break 
-             } 
-        } 
-
-        if pos = -1 
-            break 
-        else 
-            completion = %completion%%nextchar% 
-    } 
-
-    if completion <> 
-        GuiControl,, Edit1, %search%[%completion%] 
 
 return 
 
@@ -662,9 +531,9 @@ return
 
 ;---------------------------------------------------------------------- 
 ; 
-; Handle mouse click events on the list box 
+; Handle mouse click events on the listview 
 ; 
-ListBoxClick: 
+ListViewClick: 
 if (A_GuiControlEvent = "Normal"
     and !GetKeyState("Down", "P") and !GetKeyState("Up", "P"))
     send, {enter} 
@@ -710,3 +579,111 @@ ifwinnotactive, ahk_id %switcher_id%
 
 return
 
+DrawListView(windows)
+{
+  global numwin
+  global imageListID := IL_Create(numwin, 1, 1)
+
+  ; Attach the ImageLists to the ListView so that it can later display the icons:
+  LV_SetImageList(imageListID, 1)
+  LV_Delete()
+
+  iconCount = 0
+
+  For wid, title in windows
+  {
+    ; Retrieves an 8-digit hexadecimal number representing extended style of a window.
+    WinGet, style, ExStyle, ahk_id %wid%
+
+    ; http://msdn.microsoft.com/en-us/library/windows/desktop/ff700543(v=vs.85).aspx
+    ; Forces a top-level window onto the taskbar when the window is visible. 
+    WS_EX_APPWINDOW = 0x40000
+    ; A tool window does not appear in the taskbar or in the dialog that appears when the user presses ALT+TAB.
+    WS_EX_TOOLWINDOW = 0x80
+
+    isAppWindow := (style & WS_EX_APPWINDOW) 
+    isToolWindow := (style & WS_EX_TOOLWINDOW) 
+
+    ; http://msdn.microsoft.com/en-us/library/windows/desktop/ms632599(v=vs.85).aspx#owned_windows
+    ; An application can use the GetWindow function with the GW_OWNER flag to retrieve a handle to a window's owner.
+    GW_OWNER = 4
+    ownerHwnd := DllCall("GetWindow", "uint", wid, "uint", GW_OWNER)
+
+    iconNumber =
+    
+    if (isAppWindow or ( !ownerHwnd and !isToolWindow )) 
+    {
+      ; http://www.autohotkey.com/docs/misc/SendMessageList.htm
+      WM_GETICON := 0x7F
+      
+      ; http://msdn.microsoft.com/en-us/library/windows/desktop/ms632625(v=vs.85).aspx
+      ICON_BIG := 1
+      ICON_SMALL2 := 2
+      ICON_SMALL := 0
+
+      SendMessage, WM_GETICON, ICON_BIG, 0, , ahk_id %wid%
+      iconHandle := ErrorLevel
+
+      if (iconHandle = 0)
+      {
+        SendMessage, WM_GETICON, ICON_SMALL2, 0, , ahk_id %wid%
+        iconHandle := ErrorLevel
+
+        if (iconHandle = 0)
+        {
+          SendMessage, WM_GETICON, ICON_SMALL, 0, , ahk_id %wid%
+          iconHandle := ErrorLevel
+
+          if (iconHandle = 0)
+          {
+            ; http://msdn.microsoft.com/en-us/library/windows/desktop/ms633581(v=vs.85).aspx 
+            ; To write code that is compatible with both 32-bit and 64-bit 
+            ; versions of Windows, use GetClassLongPtr. When compiling for 32-bit 
+            ; Windows, GetClassLongPtr is defined as a call to the GetClassLong 
+            ; function.
+            iconHandle := DllCall("GetClassLongPtr", "uint", wid, "int", -14) ; GCL_HICON is -14 
+
+            if (iconHandle = 0)
+            {
+              iconHandle := DllCall("GetClassLongPtr", "uint", wid, "int", -34) ; GCL_HICONSM is -34 
+
+              if (iconHandle = 0) {
+                iconHandle := DllCall("LoadIcon", "uint", 0, "uint", 32512) ; IDI_APPLICATION is 32512 
+              }
+            }
+          }
+        }
+      }
+      
+      if (iconHandle <> 0)
+        iconNumber := DllCall("ImageList_ReplaceIcon", UInt, imageListID, Int, -1, UInt, iconHandle) + 1
+
+    } else {
+      WinGetClass, Win_Class, ahk_id %wid%
+      if Win_Class = #32770 ; fix for displaying control panel related windows (dialog class) that aren't on taskbar
+        iconNumber := IL_Add(imageListID, "C:\WINDOWS\system32\shell32.dll", 217) ; generic control panel icon
+    }
+
+    if iconNumber > 0
+    {
+      iconCount+=1
+      LV_Add("Icon" . iconNumber, iconCount, title, GetProcessName(wid))
+    }
+  }
+
+  LV_ModifyCol(1,60)
+  LV_ModifyCol(2,650)
+  LV_ModifyCol(3,140)
+}
+
+GetProcessName(wid) 
+{
+  WinGet, name, ProcessName, ahk_id %wid%
+  StringGetPos, pos, name, .
+  if ErrorLevel <> 1 
+  {
+    StringLeft, name, name, %pos%
+  }
+    
+  return name
+}
