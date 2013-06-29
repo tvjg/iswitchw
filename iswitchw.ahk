@@ -44,35 +44,6 @@ SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 ; User configuration 
 ; 
 
-; set this to yes to enable digit shortcuts when there are ten or 
-; less items in the list 
-digitshortcuts = 
-
-; set this to yes to enable activating the currently selected 
-; window in the background 
-activateselectioninbg =  
-
-; number of milliseconds to wait for the user become idle, before 
-; activating the currently selected window in the background 
-; 
-; it has no effect if activateselectioninbg is off 
-; 
-; if set to blank the current selection is activated immediately 
-; without delay 
-bgactivationdelay = 300 
-
-; Close switcher window if the user activates an other window. 
-; It does not work well if activateselectioninbg is enabled, so 
-; currently they cannot be enabled together. 
-closeifinactivated = 
-
-if activateselectioninbg <> 
-    if closeifinactivated <> 
-    { 
-        msgbox, activateselectioninbg and closeifinactivated cannot be enabled together 
-        exitapp 
-    } 
-
 ; Window titles containing any of the listed substrings are filtered out from
 ; the list of windows. 
 filters := ["asticky", "blackbox"] 
@@ -86,15 +57,7 @@ dynamicwindowlist =
 ; 
 ; Global variables 
 ; 
-;     numallwin      - the number of windows on the desktop 
-;     allwindows     - associative array: titles of windows on desktop keyed
-;                      by window ids  
-;     numwin         - the number of windows in the listbox 
-;     idarray        - array containing window ids for the listbox items 
-;     orig_active_id - the window ID of the originally active window 
-;                      (when the switcher is activated) 
-;     prev_active_id - the window ID of the last window activated in the 
-;                      background (only if activateselectioninbg is enabled) 
+;     allwindows     - windows on desktop 
 ;     switcher_id    - the window ID of the switcher window 
 ;     filters        - array of filters for filtering out titles 
 ;                      from the window list 
@@ -120,32 +83,17 @@ Gui, Add, ListView, w854 h510 x4 y40 -VScroll -HScroll AltSubmit -Hdr -Multi Cou
 ; 
 #space::
 
+search =
+GuiControl, , Edit1
 allwindows := Object()
-numallwin = 0 
-GoSub, RefreshWindowList 
-
-WinGet, orig_active_id, ID, A 
-prev_active_id = %orig_active_id% 
 
 Gui, Show, Center, Window Switcher 
-; If we determine the ID of the switcher window here then 
-; why doesn't it appear in the window list when the script is 
-; run the first time? (Note that RefreshWindowList has already 
-; been called above). 
-; Answer: Because when this code runs first the switcher window 
-; does not exist yet when RefreshWindowList is called. 
 WinGet, switcher_id, ID, A 
 WinSet, AlwaysOnTop, On, ahk_id %switcher_id% 
 
 Loop 
 { 
-    if closeifinactivated <> 
-        settimer, CloseIfInactive, 200 
-
     Input, input, L1, {enter}{esc}{tab}{backspace}{delete}{up}{down}{left}{right}{home}{end}
-
-    if closeifinactivated <> 
-        settimer, CloseIfInactive, off 
 
     if ErrorLevel = EndKey:enter 
     { 
@@ -155,20 +103,12 @@ Loop
     else if ErrorLevel = EndKey:escape 
     { 
         Gui, cancel 
-
-        ; restore the originally active window if 
-        ; activateselectioninbg is enabled 
-        if activateselectioninbg <> 
-            WinActivate, ahk_id %orig_active_id% 
-
         break 
     } 
     else if ErrorLevel = EndKey:tab 
     {
-        if completion = 
-            continue 
-        else 
-            input = %completion% 
+        ; FIXME: Tab should advance listview cursor to next item. 
+        continue
     }
     ; FIXME: Ctrl+backspace doesn't work.
     else if ErrorLevel = EndKey:backspace 
@@ -186,13 +126,11 @@ Loop
     else if ErrorLevel = EndKey:up 
     { 
         Send, {up} 
-        GoSuB ActivateWindowInBackgroundIfEnabled 
         continue 
     } 
     else if ErrorLevel = EndKey:down 
     { 
         Send, {down} 
-        GoSuB ActivateWindowInBackgroundIfEnabled 
         continue 
     } 
     ; FIXME: Shift selection doesn't work. 
@@ -222,33 +160,18 @@ Loop
     ; FIXME: probably other error level cases 
     ; should be handled here (interruption?) 
 
-    ; invoke digit shortcuts if applicable 
-    if digitshortcuts <> 
-        if numwin <= 10 
-            if input in 1,2,3,4,5,6,7,8,9,0 
-            { 
-                if input = 0 
-                    input = 10 
-
-                if numwin < %input% 
-                { 
-                    continue 
-                } 
-
-                GuiControl, choose, ListBox1, %input% 
-                GoSub, ActivateWindow 
-                break 
-            } 
-
     ControlFocus, Edit1, ahk_id %switcher_id% 
     Control, EditPaste, %input%, Edit1, ahk_id %switcher_id% 
 } 
 
-Gosub, CleanExit 
+exit
 
 return 
 
-  ; Unoptimized array search, returns index of first occurrence or -1 
+;---------------------------------------------------------------------- 
+; 
+; Unoptimized array search, returns index of first occurrence or -1 
+;
 IncludedIn(haystack,needle)
 {
   Loop % haystack.MaxIndex()
@@ -265,6 +188,9 @@ IncludedIn(haystack,needle)
   return -1
 }
 
+;---------------------------------------------------------------------- 
+; 
+; Runs whenever Edit control is updated 
 SearchChange:
   Gui, Submit, NoHide
   Gosub, RefreshWindowList
@@ -274,20 +200,15 @@ SearchChange:
 ; 
 ; Refresh the list of windows according to the search criteria 
 ; 
-; Sets: numwin  - see the documentation of global variables 
-;       idarray - see the documentation of global variables 
-; 
 RefreshWindowList: 
 
-    if ( dynamicwindowlist = "yes" or numallwin = 0 ) 
+    if (dynamicwindowlist = "yes" or allwindows.MinIndex() = "") 
     { 
-        numallwin = 0 
-
         WinGet, id, list, , , Program Manager 
         Loop, %id% 
         { 
-            StringTrimRight, this_id, id%a_index%, 0 
-            WinGetTitle, title, ahk_id %this_id% 
+            StringTrimRight, wid, id%a_index%, 0 
+            WinGetTitle, title, ahk_id %wid% 
             StringTrimRight, title, title, 0 
 
             ; FIXME: windows with empty titles? 
@@ -295,7 +216,7 @@ RefreshWindowList:
               continue 
 
             ; don't add the switcher window 
-            if switcher_id = %this_id% 
+            if switcher_id = %wid% 
               continue 
 
             ; don't add titles which match any of the filters 
@@ -306,64 +227,32 @@ RefreshWindowList:
             ; because Gui Add uses it for separating listbox items 
             StringReplace, title, title, |, -, all 
 
-            numallwin += 1 
-            allwindows[this_id] := title
+            procName := GetProcessName(wid)
+            allwindows.Insert({ "id": wid, "title": title, "procName": procName })
         } 
     } 
 
     ; filter the window list according to the search criteria 
     windows := Object()
-    winlist = 
-    numwin = 0 
-    For wid, title in allwindows
+    For idx, window in allwindows
     { 
       ; if there is a search string 
       if search <> 
       {
+        title := window.title
+        procName := window.procName
+
         ; don't add the windows not matching the search string 
-        ; FIXME: Cache process name like we do with window titles and ids. 
-        procName := GetProcessName(wid)
         titleAndProcName = %title% %procName%
 
         if titleAndProcName not contains %search%
           continue 
       }   
 
-      if winlist <> 
-          winlist = %winlist%| 
-      winlist = %winlist%%title%`r%wid% 
-
-      numwin += 1 
-      windows[wid] := title
+      windows.Insert(window)
     } 
 
-    ; add digit shortcuts if there are ten or less windows 
-    ; in the list and digit shortcuts are enabled 
-    if digitshortcuts <> 
-        if numwin <= 10 
-        { 
-            digitlist = 
-            digit = 1 
-            loop, parse, winlist, | 
-            { 
-                ; FIXME: windows with empty title? 
-                if A_LoopField <> 
-                { 
-                    if digitlist <> 
-                        digitlist = %digitlist%| 
-                    digitlist = %digitlist%%digit%%A_Space%%A_Space%%A_Space%%A_LoopField% 
-
-                    digit += 1 
-                    if digit = 10 
-                        digit = 0 
-                } 
-            } 
-            winlist = %digitlist% 
-        } 
-
-    DrawListView(windows)    
-
-    GoSub ActivateWindowInBackgroundIfEnabled 
+    DrawListView(windows)
 
 return 
 
@@ -374,83 +263,13 @@ return
 ActivateWindow: 
 
 Gui, submit 
-stringtrimleft, window_id, idarray%index%, 0 
-WinActivate, ahk_id %window_id% 
+rowNum:= LV_GetNext(0)
+wid := windows[rowNum].id
+WinActivate, ahk_id %wid% 
 
-return 
-
-;---------------------------------------------------------------------- 
-; 
-; Activate selected window in the background 
-; 
-ActivateWindowInBackground: 
-
-guicontrolget, index,, ListBox1 
-stringtrimleft, window_id, idarray%index%, 0 
-
-if prev_active_id <> %window_id% 
-{ 
-    WinActivate, ahk_id %window_id% 
-    WinActivate, ahk_id %switcher_id% 
-    prev_active_id = %window_id% 
-} 
-
-return 
-
-;---------------------------------------------------------------------- 
-; 
-; Activate selected window in the background if the option is enabled. 
-; If an activation delay is set then a timer is started instead of 
-; activating the window immediately. 
-; 
-ActivateWindowInBackgroundIfEnabled: 
-
-if activateselectioninbg = 
-    return 
-
-; Don't do it just after the switcher is activated. It is confusing 
-; if active window is changed immediately. 
-WinGet, id, ID, ahk_id %switcher_id% 
-if id = 
-    return 
-
-if bgactivationdelay = 
-    GoSub ActivateWindowInBackground 
-else 
-    settimer, BgActivationTimer, %bgactivationdelay% 
-
-return 
-
-;---------------------------------------------------------------------- 
-; 
-; Check if the user is idle and if so activate the currently selected 
-; window in the background 
-; 
-BgActivationTimer: 
-
-settimer, BgActivationTimer, off 
-
-GoSub ActivateWindowInBackground 
-
-return 
-
-;---------------------------------------------------------------------- 
-; 
-; Stop background window activation timer if necessary and exit 
-; 
-CleanExit: 
-
-settimer, BgActivationTimer, off 
-
-exit 
-
-;---------------------------------------------------------------------- 
-; 
-; Cancel keyboard input if GUI is closed. 
-; 
-GuiClose: 
-
-send, {esc} 
+; Destroy gui, listview and associated icon imagelist.
+IL_Destroy(imageListID1) 
+LV_Delete()
 
 return 
 
@@ -459,6 +278,7 @@ return
 ; Handle mouse click events on the listview 
 ; 
 ListViewClick: 
+; FIXME: Click does not activate window 
 if (A_GuiControlEvent = "Normal"
     and !GetKeyState("Down", "P") and !GetKeyState("Up", "P"))
     send, {enter} 
@@ -466,28 +286,25 @@ return
 
 ;---------------------------------------------------------------------- 
 ; 
-; Close the switcher window if the user activated an other window 
+; Add window list to listview  
 ; 
-CloseIfInactive: 
-
-ifwinnotactive, ahk_id %switcher_id% 
-    send, {esc} 
-
-return
-
 DrawListView(windows)
 {
-  global numwin
-  global imageListID := IL_Create(numwin, 1, 1)
+  windowCount := windows.MaxIndex()
+  global imageListID := IL_Create(windowCount, 1, 1)
 
   ; Attach the ImageLists to the ListView so that it can later display the icons:
   LV_SetImageList(imageListID, 1)
   LV_Delete()
 
   iconCount = 0
+  removedRows := Array() 
 
-  For wid, title in windows
+  For idx, window in windows
   {
+    wid := window.id
+    title := window.title
+
     ; Retrieves an 8-digit hexadecimal number representing extended style of a window.
     WinGet, style, ExStyle, ahk_id %wid%
 
@@ -563,8 +380,28 @@ DrawListView(windows)
     if iconNumber > 0
     {
       iconCount+=1
-      LV_Add("Icon" . iconNumber, iconCount, title, GetProcessName(wid))
-    }
+      LV_Add("Icon" . iconNumber, iconCount, title, window.procName)
+    } else {
+      removedRows.Insert(idx)
+    } 
+  }
+
+  ; Don't draw rows without icons.  
+  windowCount-=removedRows.MaxIndex()
+  For key,rowNum in removedRows
+  {
+    windows.Remove(rowNum)
+  }
+ 
+  if windowCount > 1
+  {
+    ; Select and focus the second row. 
+    LV_Modify(2, "Select") 
+    LV_Modify(2, "Focus")
+  } else {
+    ; Select and focus the first row. 
+    LV_Modify(1, "Select")
+    LV_Modify(1, "Focus")
   }
 
   LV_ModifyCol(1,60)
@@ -572,6 +409,10 @@ DrawListView(windows)
   LV_ModifyCol(3,140)
 }
 
+;---------------------------------------------------------------------- 
+; 
+; Get process name for given window id  
+; 
 GetProcessName(wid) 
 {
   WinGet, name, ProcessName, ahk_id %wid%
