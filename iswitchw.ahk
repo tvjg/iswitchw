@@ -93,18 +93,6 @@ filters := ["asticky", "blackbox"]
 ; slows down the update of the listbox, so this feature is disabled by default. 
 dynamicwindowlist = 
 
-; path to sound file played when the user types a substring which 
-; does not match any of the windows 
-; 
-; set this to blank if you don't want a sound 
-; 
-; nomatchsound = %windir%\Media\ding.wav 
-nomatchsound =  
-
-if nomatchsound <> 
-    ifnotexist, %nomatchsound% 
-        msgbox, Sound file %nomatchsound% not found. No sound will be played. 
-
 ;---------------------------------------------------------------------- 
 ; 
 ; Global variables 
@@ -251,8 +239,6 @@ Loop
 
                 if numwin < %input% 
                 { 
-                    if nomatchsound <> 
-                        SoundPlay, %nomatchsound% 
                     continue 
                 } 
 
