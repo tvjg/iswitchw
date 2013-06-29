@@ -48,17 +48,6 @@ SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 ; less items in the list 
 digitshortcuts = 
 
-; set this to yes to enable first letter match mode where the typed 
-; search string must match the first letter of words in the 
-; window title (only alphanumeric characters are taken into account) 
-; 
-; For example, the search string "ad" matches both of these titles: 
-; 
-;  AutoHotkey - Documentation 
-;  Anne's Diary 
-; 
-firstlettermatch = 
-
 ; set this to yes to enable activating the currently selected 
 ; window in the background 
 activateselectioninbg =  
@@ -325,55 +314,18 @@ RefreshWindowList:
 
     For wid, title in allwindows
     { 
-        ; don't add the windows not matching the search string 
-        ; if there is a search string 
-        if search <> 
-            if firstlettermatch = 
-            { 
-                if title not contains %search%, 
-                    continue 
-            } 
-            else 
-            { 
-                stringlen, search_len, search 
+      ; if there is a search string 
+      ; don't add the windows not matching the search string 
+      if search <> 
+        if title not contains %search%, 
+          continue 
 
-                index = 1 
-                match = 
+      if winlist <> 
+          winlist = %winlist%| 
+      winlist = %winlist%%title%`r%wid% 
 
-                loop, parse, title, %A_Space% 
-                {                    
-                    stringleft, first_letter, A_LoopField, 1 
-
-                    ; only words beginning with an alphanumeric 
-                    ; character are taken into account 
-                    if first_letter not in 1,2,3,4,5,6,7,8,9,0,a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p,q,r,s,t,u,v,w,x,y,z 
-                        continue 
-
-                    stringmid, search_char, search, %index%, 1 
-
-                    if first_letter <> %search_char% 
-                        break 
-
-                    index += 1 
-
-                    ; no more search characters 
-                    if index > %search_len% 
-                    { 
-                        match = yes 
-                        break 
-                    } 
-                } 
-
-                if match = 
-                    continue    ; no match 
-            } 
-
-        if winlist <> 
-            winlist = %winlist%| 
-        winlist = %winlist%%title%`r%wid% 
-
-        numwin += 1 
-        windows[wid] := title
+      numwin += 1 
+      windows[wid] := title
     } 
 
     ; add digit shortcuts if there are ten or less windows 
