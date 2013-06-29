@@ -7,13 +7,13 @@ SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 ; iswitchw - Incrementally switch between windows using substrings
 ;
 ; [CREATED by keyboardfreak, 10 October 2004] 
-;     http://www.autohotkey.com/forum/viewtopic.php?t=1040
+;     http://www.autohotkey.com/forum/viewtopic.php?t=1040 
 ;
 ; [MODIFIED by ezuk, 3 July 2008, changes noted below. Cosmetics only.] 
-;     http://www.autohotkey.com/forum/viewtopic.php?t=33353;
+;     http://www.autohotkey.com/forum/viewtopic.php?t=33353; 
 ;
-; [MODIFIED by jixiuf@gmail.com, 3 July 2008] 
-;     https://github.com/jixiuf/my_autohotkey_scripts/blob/master/ahk_scripts/iswitchw-plus.ahk
+; [MODIFIED by jixiuf@gmail.com, 11 June 2011] 
+;     https://github.com/jixiuf/my_autohotkey_scripts/blob/master/ahk_scripts/iswitchw-plus.ahk 
 ;
 ; [MODIFIED by dirtyrottenscoundrel, 28 June 2013] 
 ;     FIXME: Publish to Github 
@@ -101,14 +101,18 @@ dynamicwindowlist =
 ; 
 ;---------------------------------------------------------------------- 
 
+search = 
+
 AutoTrim, off 
 
 Gui, +LastFound +AlwaysOnTop -Caption +ToolWindow 
 Gui, Color, black,black
 WinSet, Transparent, 225
-Gui,Font,s16 cEEE8D5 bold,Consolas
-Gui,Margin,1,1
-Gui, Add, ListView, w854 h510 -VScroll AltSubmit -Hdr -HScroll -Multi Count10 gListViewClick, index|title|proc
+Gui, Font, s16 cEEE8D5 bold, Consolas
+Gui, Margin, 4, 4
+Gui, Add, Text,     w100 h30 x6 y8, Search`:
+Gui, Add, Edit,     w500 h30 x110 y4 gSearchChange vsearch,
+Gui, Add, ListView, w854 h510 x4 y40 -VScroll -HScroll AltSubmit -Hdr -Multi Count10 gListViewClick, index|title|proc
 
 ;---------------------------------------------------------------------- 
 ; 
@@ -116,9 +120,8 @@ Gui, Add, ListView, w854 h510 -VScroll AltSubmit -Hdr -HScroll -Multi Count10 gL
 ; 
 #space::
 
-search = 
+allwindows := Object()
 numallwin = 0 
-GuiControl,, Edit1 
 GoSub, RefreshWindowList 
 
 WinGet, orig_active_id, ID, A 
@@ -139,7 +142,7 @@ Loop
     if closeifinactivated <> 
         settimer, CloseIfInactive, 200 
 
-    Input, input, L1, {enter}{esc}{backspace}{up}{down}{pgup}{pgdn}{tab}{left}{right} 
+    Input, input, L1, {enter}{esc}{tab}{backspace}{delete}{up}{down}{left}{right}{home}{end}
 
     if closeifinactivated <> 
         settimer, CloseIfInactive, off 
@@ -149,8 +152,7 @@ Loop
         GoSub, ActivateWindow 
         break 
     } 
-
-    if ErrorLevel = EndKey:escape 
+    else if ErrorLevel = EndKey:escape 
     { 
         Gui, cancel 
 
@@ -161,57 +163,59 @@ Loop
 
         break 
     } 
-
-    if ErrorLevel = EndKey:backspace 
-    { 
-        GoSub, DeleteSearchChar 
-        continue 
-    } 
-
-    if ErrorLevel = EndKey:tab 
+    else if ErrorLevel = EndKey:tab 
+    {
         if completion = 
             continue 
         else 
             input = %completion% 
-
-    ; pass these keys to the selector window 
-
-    if ErrorLevel = EndKey:up 
+    }
+    ; FIXME: Ctrl+backspace doesn't work.
+    else if ErrorLevel = EndKey:backspace 
+    { 
+        ControlFocus, Edit1, ahk_id %switcher_id% 
+        ControlSend, Edit1, {backspace}, ahk_id %switcher_id% 
+        continue 
+    } 
+    else if ErrorLevel = EndKey:delete 
+    { 
+        ControlFocus, Edit1, ahk_id %switcher_id% 
+        ControlSend, Edit1, {delete}, ahk_id %switcher_id% 
+        continue 
+    } 
+    else if ErrorLevel = EndKey:up 
     { 
         Send, {up} 
         GoSuB ActivateWindowInBackgroundIfEnabled 
         continue 
     } 
-
-    if ErrorLevel = EndKey:down 
+    else if ErrorLevel = EndKey:down 
     { 
         Send, {down} 
         GoSuB ActivateWindowInBackgroundIfEnabled 
         continue 
     } 
-
-    if ErrorLevel = EndKey:pgup 
+    ; FIXME: Shift selection doesn't work. 
+    else if ErrorLevel = EndKey:left 
     { 
-        Send, {pgup} 
-
-        GoSuB ActivateWindowInBackgroundIfEnabled 
+        ControlFocus, Edit1, ahk_id %switcher_id% 
+        ControlSend, Edit1, {left}, ahk_id %switcher_id% 
         continue 
     } 
-
-    if ErrorLevel = EndKey:pgdn 
+    else if ErrorLevel = EndKey:right 
     { 
-        Send, {pgdn} 
-        GoSuB ActivateWindowInBackgroundIfEnabled 
+        ControlFocus, Edit1, ahk_id %switcher_id% 
+        ControlSend, Edit1, {right}, ahk_id %switcher_id% 
         continue 
     } 
-
-    if ErrorLevel = EndKey:left 
+    else if ErrorLevel = EndKey:home 
     { 
+        send, {home}
         continue 
     } 
-
-    if ErrorLevel = EndKey:right 
+    else if ErrorLevel = EndKey:end 
     { 
+        send, {end}
         continue 
     } 
 
@@ -236,11 +240,8 @@ Loop
                 break 
             } 
 
-    ; process typed character 
-
-    search = %search%%input% 
-    GuiControl,, Edit1, %search% 
-    GoSub, RefreshWindowList 
+    ControlFocus, Edit1, ahk_id %switcher_id% 
+    Control, EditPaste, %input%, Edit1, ahk_id %switcher_id% 
 } 
 
 Gosub, CleanExit 
@@ -264,6 +265,11 @@ IncludedIn(haystack,needle)
   return -1
 }
 
+SearchChange:
+  Gui, Submit, NoHide
+  Gosub, RefreshWindowList
+  return
+
 ;---------------------------------------------------------------------- 
 ; 
 ; Refresh the list of windows according to the search criteria 
@@ -272,8 +278,6 @@ IncludedIn(haystack,needle)
 ;       idarray - see the documentation of global variables 
 ; 
 RefreshWindowList: 
-    allwindows := Object()
-    windows := Object()
 
     if ( dynamicwindowlist = "yes" or numallwin = 0 ) 
     { 
@@ -308,17 +312,22 @@ RefreshWindowList:
     } 
 
     ; filter the window list according to the search criteria 
-
+    windows := Object()
     winlist = 
     numwin = 0 
-
     For wid, title in allwindows
     { 
       ; if there is a search string 
-      ; don't add the windows not matching the search string 
       if search <> 
-        if title not contains %search%, 
+      {
+        ; don't add the windows not matching the search string 
+        ; FIXME: Cache process name like we do with window titles and ids. 
+        procName := GetProcessName(wid)
+        titleAndProcName = %title% %procName%
+
+        if titleAndProcName not contains %search%
           continue 
+      }   
 
       if winlist <> 
           winlist = %winlist%| 
@@ -355,21 +364,6 @@ RefreshWindowList:
     DrawListView(windows)    
 
     GoSub ActivateWindowInBackgroundIfEnabled 
-
-return 
-
-;---------------------------------------------------------------------- 
-; 
-; Delete last search char and update the window list 
-; 
-DeleteSearchChar: 
-
-if search = 
-    return 
-
-StringTrimRight, search, search, 1 
-GuiControl,, Edit1, %search% 
-GoSub, RefreshWindowList 
 
 return 
 
