@@ -1,8 +1,3 @@
-#NoEnv  ; Recommended for performance and compatibility with future AutoHotkey releases.
-; #Warn  ; Enable warnings to assist with detecting common errors.
-SendMode Input  ; Recommended for new scripts due to its superior speed and reliability.
-SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
-
 ; 
 ; iswitchw - Incrementally switch between windows using substrings
 ;
@@ -48,21 +43,26 @@ SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 ; the list of windows. 
 filters := ["asticky", "blackbox"] 
 
-; Set this yes to update the list of windows every time the contents of the 
-; listbox is updated. This is usually not necessary and it is an overhead which 
-; slows down the update of the listbox, so this feature is disabled by default. 
-dynamicwindowlist = 
+; Set this to true to update the list of windows every time the search is  
+; updated. This is usually not necessary and creates additional overhead, so 
+; it is disabled by default. 
+refreshEveryKeystroke = false
 
 ;---------------------------------------------------------------------- 
 ; 
 ; Global variables 
 ; 
-;     allwindows     - windows on desktop 
+;     allwindows     - windows on desktop
+;     windows        - windows in listbox 
+;     search         - the current search string 
 ;     switcher_id    - the window ID of the switcher window 
-;     filters        - array of filters for filtering out titles 
-;                      from the window list 
 ; 
 ;---------------------------------------------------------------------- 
+
+#NoEnv  ; Recommended for performance and compatibility with future AutoHotkey releases.
+; #Warn  ; Enable warnings to assist with detecting common errors.
+SendMode Input  ; Recommended for new scripts due to its superior speed and reliability.
+SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 
 AutoTrim, off 
 
@@ -96,12 +96,12 @@ Loop
 
   if ErrorLevel = EndKey:enter 
   { 
-    GoSub, ActivateWindow 
+    ActivateWindow()
     break 
   } 
   else if ErrorLevel = EndKey:escape 
   { 
-    Gui, cancel 
+    Gui Cancel 
     break 
   } 
   else if ErrorLevel = EndKey:tab 
@@ -187,6 +187,24 @@ exit
 
 ;---------------------------------------------------------------------- 
 ; 
+; Runs whenever Edit control is updated 
+SearchChange:
+  Gui, Submit, NoHide
+  RefreshWindowList()
+  return
+
+;---------------------------------------------------------------------- 
+; 
+; Handle mouse click events on the listview 
+; 
+ListViewClick: 
+if (A_GuiControlEvent = "Normal") {
+  SendEvent {enter}
+}
+return
+
+;---------------------------------------------------------------------- 
+; 
 ; Checks if user is holding Ctrl and/or Shift, then adds the 
 ; appropriate modifiers to the key parameter before returning the 
 ; result. 
@@ -224,19 +242,14 @@ IncludedIn(haystack,needle)
 
 ;---------------------------------------------------------------------- 
 ; 
-; Runs whenever Edit control is updated 
-SearchChange:
-  Gui, Submit, NoHide
-  Gosub, RefreshWindowList
-  return
-
-;---------------------------------------------------------------------- 
-; 
 ; Refresh the list of windows according to the search criteria 
 ; 
-RefreshWindowList: 
+RefreshWindowList() 
+{
+  global allwindows, search, switcher_id 
+  global filters, refreshEveryKeystroke
 
-    if (dynamicwindowlist = "yes" or allwindows.MinIndex() = "") 
+    if (refreshEveryKeystroke = true or allwindows.MinIndex() = "") 
     { 
         WinGet, id, list, , , Program Manager 
         Loop, %id% 
@@ -267,7 +280,7 @@ RefreshWindowList:
     } 
 
     ; filter the window list according to the search criteria 
-    windows := Object()
+    global windows := Object()
     For idx, window in allwindows
     { 
       ; if there is a search string 
@@ -287,35 +300,23 @@ RefreshWindowList:
     } 
 
     DrawListView(windows)
-
-return 
+} 
 
 ;---------------------------------------------------------------------- 
 ; 
 ; Activate selected window 
 ; 
-ActivateWindow: 
+ActivateWindow()
+{
+  global windows
 
-Gui, submit 
-rowNum:= LV_GetNext(0)
-wid := windows[rowNum].id
-WinActivate, ahk_id %wid% 
-
-; Destroy gui, listview and associated icon imagelist.
-IL_Destroy(imageListID1) 
-LV_Delete()
-
-return 
-
-;---------------------------------------------------------------------- 
-; 
-; Handle mouse click events on the listview 
-; 
-ListViewClick: 
-if (A_GuiControlEvent = "Normal") {
-  SendEvent {enter}
+  Gui Submit 
+  rowNum:= LV_GetNext(0)
+  wid := windows[rowNum].id
+  WinActivate, ahk_id %wid% 
+  
+  LV_Delete()
 }
-return
 
 ;---------------------------------------------------------------------- 
 ; 
@@ -324,7 +325,7 @@ return
 DrawListView(windows)
 {
   windowCount := windows.MaxIndex()
-  global imageListID := IL_Create(windowCount, 1, 1)
+  imageListID := IL_Create(windowCount, 1, 1)
 
   ; Attach the ImageLists to the ListView so that it can later display the icons:
   LV_SetImageList(imageListID, 1)
