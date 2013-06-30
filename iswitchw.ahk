@@ -280,27 +280,63 @@ RefreshWindowList()
   } 
 
   ; filter the window list according to the search criteria 
+  windows := FilterWindowList(allwindows, search)
+
+  DrawListView(windows)
+} 
+
+;---------------------------------------------------------------------- 
+; 
+; http://stackoverflow.com/questions/2891514/algorithms-for-fuzzy-matching-strings
+;
+; Matching in the style of Ido/CtrlP 
+;
+; Returns:
+;   Global filtered list of windows 
+;
+; Example: 
+;   explr builds the regex /[^e]*e[^x]*x[^p]*p[^l]*l[^r]*r/i 
+;   which would match explorer  
+;   or likewise 
+;   explr ahk 
+;   which would match Exp.orer - ~/autohotkey, but not Explorer - Documents 
+; 
+; Rules: 
+;  It is expected that all the letters of the input be in the keyword
+;  It is expected that the letters in the input be in the same order in the keyword
+;  The list of keywords returned should be presented in a consistent (reproductible) order
+;  The algorithm should be case insensitive
+;
+FilterWindowList(list, criteria)
+{
   global windows := Object()
-  For idx, window in allwindows
+
+  expr := "i)"
+  Loop, parse, criteria
+  {
+    expr .= "[^" . A_LoopField . "]*" . A_LoopField
+  }
+
+  For idx, window in list
   { 
     ; if there is a search string 
-    if search <> 
+    if criteria <> 
     {
       title := window.title
       procName := window.procName
 
       ; don't add the windows not matching the search string 
-      titleAndProcName = %title% %procName%
+      titleAndProcName = %procName% %title%
 
-      if titleAndProcName not contains %search%
+      if RegExMatch(titleAndProcName, expr) = 0
         continue 
     }   
 
     windows.Insert(window)
   } 
 
-  DrawListView(windows)
-} 
+  return windows
+}
 
 ;---------------------------------------------------------------------- 
 ; 
@@ -414,7 +450,7 @@ DrawListView(windows)
     if iconNumber > 0
     {
       iconCount+=1
-      LV_Add("Icon" . iconNumber, iconCount, title, window.procName)
+      LV_Add("Icon" . iconNumber, iconCount, window.procName, title)
     } else {
       removedRows.Insert(idx)
     } 
@@ -431,8 +467,8 @@ DrawListView(windows)
   LV_Modify(1, "Focus")
 
   LV_ModifyCol(1,60)
-  LV_ModifyCol(2,650)
-  LV_ModifyCol(3,140)
+  LV_ModifyCol(2,140)
+  LV_ModifyCol(3,650)
 }
 
 ;---------------------------------------------------------------------- 
