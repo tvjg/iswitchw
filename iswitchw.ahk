@@ -64,8 +64,6 @@ dynamicwindowlist =
 ; 
 ;---------------------------------------------------------------------- 
 
-search = 
-
 AutoTrim, off 
 
 Gui, +LastFound +AlwaysOnTop -Caption +ToolWindow 
@@ -75,7 +73,7 @@ Gui, Font, s16 cEEE8D5 bold, Consolas
 Gui, Margin, 4, 4
 Gui, Add, Text,     w100 h30 x6 y8, Search`:
 Gui, Add, Edit,     w500 h30 x110 y4 gSearchChange vsearch,
-Gui, Add, ListView, w854 h510 x4 y40 -VScroll -HScroll AltSubmit -Hdr -Multi Count10 gListViewClick, index|title|proc
+Gui, Add, ListView, w854 h510 x4 y40 -VScroll -HScroll -Hdr -Multi Count10 AltSubmit gListViewClick, index|title|proc
 
 ;---------------------------------------------------------------------- 
 ; 
@@ -84,89 +82,125 @@ Gui, Add, ListView, w854 h510 x4 y40 -VScroll -HScroll AltSubmit -Hdr -Multi Cou
 #space::
 
 search =
-GuiControl, , Edit1
 allwindows := Object()
 
+GuiControl, , Edit1
 Gui, Show, Center, Window Switcher 
 WinGet, switcher_id, ID, A 
 WinSet, AlwaysOnTop, On, ahk_id %switcher_id% 
+ControlFocus, Edit1, ahk_id %switcher_id% 
 
 Loop 
 { 
-    Input, input, L1, {enter}{esc}{tab}{backspace}{delete}{up}{down}{left}{right}{home}{end}
+  Input, input, L1, {enter}{esc}{tab}{backspace}{delete}{up}{down}{left}{right}{home}{end}
 
-    if ErrorLevel = EndKey:enter 
-    { 
-        GoSub, ActivateWindow 
-        break 
-    } 
-    else if ErrorLevel = EndKey:escape 
-    { 
-        Gui, cancel 
-        break 
-    } 
-    else if ErrorLevel = EndKey:tab 
+  if ErrorLevel = EndKey:enter 
+  { 
+    GoSub, ActivateWindow 
+    break 
+  } 
+  else if ErrorLevel = EndKey:escape 
+  { 
+    Gui, cancel 
+    break 
+  } 
+  else if ErrorLevel = EndKey:tab 
+  {
+    ControlFocus, SysListView321, ahk_id %switcher_id%
+
+    ; When on last row, wrap tab next to top of list.
+    if LV_GetNext(0) = LV_GetCount()
     {
-        ; FIXME: Tab should advance listview cursor to next item. 
-        continue
+      LV_Modify(1, "Select")
+      LV_Modify(1, "Focus")
+    } else {
+      ControlSend, SysListView321, {down}, ahk_id %switcher_id% 
     }
-    ; FIXME: Ctrl+backspace doesn't work.
-    else if ErrorLevel = EndKey:backspace 
-    { 
-        ControlFocus, Edit1, ahk_id %switcher_id% 
-        ControlSend, Edit1, {backspace}, ahk_id %switcher_id% 
-        continue 
-    } 
-    else if ErrorLevel = EndKey:delete 
-    { 
-        ControlFocus, Edit1, ahk_id %switcher_id% 
-        ControlSend, Edit1, {delete}, ahk_id %switcher_id% 
-        continue 
-    } 
-    else if ErrorLevel = EndKey:up 
-    { 
-        Send, {up} 
-        continue 
-    } 
-    else if ErrorLevel = EndKey:down 
-    { 
-        Send, {down} 
-        continue 
-    } 
-    ; FIXME: Shift selection doesn't work. 
-    else if ErrorLevel = EndKey:left 
-    { 
-        ControlFocus, Edit1, ahk_id %switcher_id% 
-        ControlSend, Edit1, {left}, ahk_id %switcher_id% 
-        continue 
-    } 
-    else if ErrorLevel = EndKey:right 
-    { 
-        ControlFocus, Edit1, ahk_id %switcher_id% 
-        ControlSend, Edit1, {right}, ahk_id %switcher_id% 
-        continue 
-    } 
-    else if ErrorLevel = EndKey:home 
-    { 
-        send, {home}
-        continue 
-    } 
-    else if ErrorLevel = EndKey:end 
-    { 
-        send, {end}
-        continue 
-    } 
 
-    ; FIXME: probably other error level cases 
-    ; should be handled here (interruption?) 
-
+    continue
+  }
+  else if ErrorLevel = EndKey:backspace 
+  {
     ControlFocus, Edit1, ahk_id %switcher_id% 
-    Control, EditPaste, %input%, Edit1, ahk_id %switcher_id% 
+    
+    if GetKeyState("Ctrl","P")
+      chars = {blind}^{Left}{Del} ; courtesy of VxE: http://www.autohotkey.com/board/topic/35458-backward-search-delete-a-word-to-the-left/#entry223378 
+    else
+      chars = {backspace}
+      
+    ControlSend, Edit1, %chars%, ahk_id %switcher_id% 
+
+    continue 
+  } 
+  else if ErrorLevel = EndKey:delete 
+  { 
+    ControlFocus, Edit1, ahk_id %switcher_id% 
+    keys := AddModifierKeys("{del}")
+    ControlSend, Edit1, %keys%, ahk_id %switcher_id% 
+    continue 
+  } 
+  else if ErrorLevel = EndKey:up 
+  { 
+    ControlFocus, SysListView321, ahk_id %switcher_id% 
+    ControlSend, SysListView321, {up}, ahk_id %switcher_id% 
+    continue 
+  } 
+  else if ErrorLevel = EndKey:down 
+  { 
+    ControlFocus, SysListView321, ahk_id %switcher_id% 
+    ControlSend, SysListView321, {down}, ahk_id %switcher_id% 
+    continue 
+  } 
+  else if ErrorLevel = EndKey:left 
+  { 
+    ControlFocus, Edit1, ahk_id %switcher_id% 
+    keys := AddModifierKeys("{left}")
+    ControlSend, Edit1, %keys%, ahk_id %switcher_id% 
+    continue 
+  } 
+  else if ErrorLevel = EndKey:right 
+  { 
+    ControlFocus, Edit1, ahk_id %switcher_id% 
+    keys := AddModifierKeys("{right}")
+    ControlSend, Edit1, %keys%, ahk_id %switcher_id% 
+    continue 
+  } 
+  else if ErrorLevel = EndKey:home 
+  { 
+    send % AddModifierKeys("{home}") 
+    continue 
+  } 
+  else if ErrorLevel = EndKey:end 
+  { 
+    send % AddModifierKeys("{end}") 
+    continue 
+  } 
+
+  ; FIXME: probably other error level cases 
+  ; should be handled here (interruption?) 
+
+  ControlFocus, Edit1, ahk_id %switcher_id% 
+  Control, EditPaste, %input%, Edit1, ahk_id %switcher_id% 
 } 
 
 exit
 
-return 
+;---------------------------------------------------------------------- 
+; 
+; Checks if user is holding Ctrl and/or Shift, then adds the 
+; appropriate modifiers to the key parameter before returning the 
+; result. 
+;
+AddModifierKeys(key)
+{
+  if GetKeyState("Ctrl","P")
+    key := "^" . key
+
+  if GetKeyState("Shift","P")
+    key := "+" . key
+
+  return key
+}
 
 ;---------------------------------------------------------------------- 
 ; 
@@ -278,11 +312,10 @@ return
 ; Handle mouse click events on the listview 
 ; 
 ListViewClick: 
-; FIXME: Click does not activate window 
-if (A_GuiControlEvent = "Normal"
-    and !GetKeyState("Down", "P") and !GetKeyState("Up", "P"))
-    send, {enter} 
-return 
+if (A_GuiControlEvent = "Normal") {
+  SendEvent {enter}
+}
+return
 
 ;---------------------------------------------------------------------- 
 ; 
@@ -392,17 +425,9 @@ DrawListView(windows)
   {
     windows.Remove(rowNum)
   }
- 
-  if windowCount > 1
-  {
-    ; Select and focus the second row. 
-    LV_Modify(2, "Select") 
-    LV_Modify(2, "Focus")
-  } else {
-    ; Select and focus the first row. 
-    LV_Modify(1, "Select")
-    LV_Modify(1, "Focus")
-  }
+    
+  LV_Modify(1, "Select")
+  LV_Modify(1, "Focus")
 
   LV_ModifyCol(1,60)
   LV_ModifyCol(2,650)
