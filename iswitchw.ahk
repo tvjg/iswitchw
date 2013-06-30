@@ -249,57 +249,57 @@ RefreshWindowList()
   global allwindows, search, switcher_id 
   global filters, refreshEveryKeystroke
 
-    if (refreshEveryKeystroke = true or allwindows.MinIndex() = "") 
+  if (refreshEveryKeystroke = true or allwindows.MinIndex() = "") 
+  { 
+    WinGet, id, list, , , Program Manager 
+    Loop, %id% 
     { 
-        WinGet, id, list, , , Program Manager 
-        Loop, %id% 
-        { 
-            StringTrimRight, wid, id%a_index%, 0 
-            WinGetTitle, title, ahk_id %wid% 
-            StringTrimRight, title, title, 0 
+      StringTrimRight, wid, id%a_index%, 0 
+      WinGetTitle, title, ahk_id %wid% 
+      StringTrimRight, title, title, 0 
 
-            ; FIXME: windows with empty titles? 
-            if title = 
-              continue 
+      ; FIXME: windows with empty titles? 
+      if title = 
+        continue 
 
-            ; don't add the switcher window 
-            if switcher_id = %wid% 
-              continue 
+      ; don't add the switcher window 
+      if switcher_id = %wid% 
+        continue 
 
-            ; don't add titles which match any of the filters 
-            if IncludedIn(filters, title) > -1
-              continue
+      ; don't add titles which match any of the filters 
+      if IncludedIn(filters, title) > -1
+        continue
 
-            ; replace pipe (|) characters in the window title, 
-            ; because Gui Add uses it for separating listbox items 
-            StringReplace, title, title, |, -, all 
+      ; replace pipe (|) characters in the window title, 
+      ; because Gui Add uses it for separating listbox items 
+      StringReplace, title, title, |, -, all 
 
-            procName := GetProcessName(wid)
-            allwindows.Insert({ "id": wid, "title": title, "procName": procName })
-        } 
+      procName := GetProcessName(wid)
+      allwindows.Insert({ "id": wid, "title": title, "procName": procName })
     } 
+  } 
 
-    ; filter the window list according to the search criteria 
-    global windows := Object()
-    For idx, window in allwindows
-    { 
-      ; if there is a search string 
-      if search <> 
-      {
-        title := window.title
-        procName := window.procName
+  ; filter the window list according to the search criteria 
+  global windows := Object()
+  For idx, window in allwindows
+  { 
+    ; if there is a search string 
+    if search <> 
+    {
+      title := window.title
+      procName := window.procName
 
-        ; don't add the windows not matching the search string 
-        titleAndProcName = %title% %procName%
+      ; don't add the windows not matching the search string 
+      titleAndProcName = %title% %procName%
 
-        if titleAndProcName not contains %search%
-          continue 
-      }   
+      if titleAndProcName not contains %search%
+        continue 
+    }   
 
-      windows.Insert(window)
-    } 
+    windows.Insert(window)
+  } 
 
-    DrawListView(windows)
+  DrawListView(windows)
 } 
 
 ;---------------------------------------------------------------------- 
