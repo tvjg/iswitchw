@@ -1,3 +1,5 @@
+; TODO: Move this to readme file 
+
 ; 
 ; iswitchw - Incrementally switch between windows using substrings
 ;
@@ -190,6 +192,7 @@ exit
 ; Runs whenever Edit control is updated 
 SearchChange:
   Gui, Submit, NoHide
+  ; TODO: Debounce this call 
   RefreshWindowList()
   return
 
@@ -309,8 +312,23 @@ RefreshWindowList()
 ;
 FilterWindowList(list, criteria)
 {
+  ;TODO: When adding to criteria (ie typing, not erasing), don't rebuild the 
+  ; window lists from the list of all windows on every press -- instead refilter 
+  ; the existing filtered list.
   global windows := Object()
+  filteredList := Object()
 
+  ;TODO: Consider splitting criteria string on spaces and using each term as a 
+  ; separate filter expression. For example, you are working on an AHK script.
+  ; There are two Explorer windows open to ~/scripts and ~/scripts-old, a GVim 
+  ; instances editing a script in one of the folders, and a browser window open 
+  ; that mentions scripts in the title. This is amongst all the other stuff going 
+  ; on. You begin typing 'scri-'' and now we have several best matches filtered. 
+  ; But I want GVim. Now I might be able to make a more unique match by adding 
+  ; the extension of the file open in Vim: 'scriahk'. Pretty good, but really the 
+  ; first though was Vim. By breaking on space, we could first filter the list 
+  ; for matches on 'scri' for 'script' and then, 'vim' for the match on GVim 
+  ; amongst the remaining windows.
   expr := "i)"
   Loop, parse, criteria
   {
@@ -330,10 +348,31 @@ FilterWindowList(list, criteria)
 
       if RegExMatch(titleAndProcName, expr) = 0
         continue 
-    }   
+
+      window["score"] := Difference(criteria, titleAndProcName)
+    } else {
+      window["score"] := 0
+    }
+
 
     windows.Insert(window)
   } 
+
+  ; insertion sort to order filtered windows by best match first 
+  Loop % windows.MaxIndex() - 1
+  {
+    i := A_Index+1
+    window := windows[i]
+    j := i-1
+ 
+    While j >= 0 and windows[j].score > window.score
+    {
+      windows[j+1] := windows[j]
+      j--
+    }
+ 
+    windows[j+1] := window
+  }
 
   return windows
 }
@@ -485,4 +524,45 @@ GetProcessName(wid)
   }
     
   return name
+}
+
+;---------------------------------------------------------------------- 
+;
+; http://www.autohotkey.com/board/topic/54987-sift3-super-fast-and-accurate-string-distance-algorithm/#entry345400
+; 
+; returns a float: between "0.0 = identical" and "1.0 = nothing in common" 
+; 
+Difference(string1, string2, maxOffset=5) {    ;
+  ; either identical or (assumption:) "only one" char with different case
+  If (string1 = string2)
+    Return (string1 == string2 ? 0/1 : 0.2/StrLen(string1))    
+  
+  If (string1 = "" OR string2 = "")
+    Return (string1 = string2 ? 0/1 : 1/1)
+
+  StringSplit, n, string1
+  StringSplit, m, string2
+  ni := 1, mi := 1, lcs := 0
+  While((ni <= n0) AND (mi <= m0)) {
+    If (n%ni% == m%mi%)
+      EnvAdd, lcs, 1
+    Else If (n%ni% = m%mi%)
+      EnvAdd, lcs, 0.8
+    Else{
+      Loop, %maxOffset%  {
+        oi := ni + A_Index, pi := mi + A_Index
+        If ((n%oi% = m%mi%) AND (oi <= n0)){
+            ni := oi, lcs += (n%oi% == m%mi% ? 1 : 0.8)
+            Break
+        }
+        If ((n%ni% = m%pi%) AND (pi <= m0)){
+            mi := pi, lcs += (n%ni% == m%pi% ? 1 : 0.8)
+            Break
+        }
+      }
+    }
+    EnvAdd, ni, 1
+    EnvAdd, mi, 1
+  }
+  Return ((n0 + m0)/2 - lcs) / (n0 > m0 ? n0 : m0)
 }
