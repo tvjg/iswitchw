@@ -12,6 +12,10 @@ filters := ["asticky", "blackbox"]
 ; it is disabled by default.
 refreshEveryKeystroke = false
 
+; Only re-filter the possible window matches this often (in ms) at maximum.
+; When typing is rapid, no sense in running the search on every keypress.
+debounceDuration = 250
+
 ;----------------------------------------------------------------------
 ;
 ; Global variables
@@ -20,6 +24,7 @@ refreshEveryKeystroke = false
 ;     windows        - windows in listbox
 ;     search         - the current search string
 ;     switcher_id    - the window ID of the switcher window
+;     debounced      - true when its ok to re-filter
 ;
 ;----------------------------------------------------------------------
 
@@ -46,6 +51,7 @@ Gui, Add, ListView, w854 h510 x4 y40 -VScroll -HScroll -Hdr -Multi Count10 AltSu
 #space::
 
 search =
+debounced := true
 allwindows := Object()
 
 GuiControl, , Edit1
@@ -153,8 +159,24 @@ exit
 ;
 ; Runs whenever Edit control is updated
 SearchChange:
+  global debounced, debounceDuration
+  if (!debounced) {
+    return
+  }
+  debounced := false
+  SetTimer, Debounce, -%debounceDuration%
+
   Gui, Submit, NoHide
-  ; TODO: Debounce this call
+  RefreshWindowList()
+  return
+
+;----------------------------------------------------------------------
+;
+; Clear debounce check
+Debounce:
+  global debounced := true
+
+  Gui, Submit, NoHide
   RefreshWindowList()
   return
 
@@ -163,10 +185,10 @@ SearchChange:
 ; Handle mouse click events on the listview
 ;
 ListViewClick:
-if (A_GuiControlEvent = "Normal") {
-  SendEvent {enter}
-}
-return
+  if (A_GuiControlEvent = "Normal") {
+    SendEvent {enter}
+  }
+  return
 
 ;----------------------------------------------------------------------
 ;
