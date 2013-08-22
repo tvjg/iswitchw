@@ -16,6 +16,12 @@ refreshEveryKeystroke = false
 ; When typing is rapid, no sense in running the search on every keypress.
 debounceDuration = 250
 
+; When true, filtered matches are scored and the best matches are presented
+; first. This helps account for simple spelling mistakes such as transposed
+; letters e.g. googel, vritualbox. When false, title matches are filtered and
+; presented in the order given by Windows. 
+scoreMatches := true
+
 ;----------------------------------------------------------------------
 ;
 ; Global variables
@@ -299,8 +305,8 @@ FilterWindowList(list, criteria)
   ;TODO: When adding to criteria (ie typing, not erasing), don't rebuild the
   ; window lists from the list of all windows on every press -- instead refilter
   ; the existing filtered list.
-  global windows := Object()
-  filteredList := Object()
+  global windows, scoreMatches
+  windows := Object(), filteredList := Object()
 
   ;TODO: Consider splitting criteria string on spaces and using each term as a
   ; separate filter expression. For example, you are working on an AHK script.
@@ -332,15 +338,16 @@ FilterWindowList(list, criteria)
 
       if RegExMatch(titleAndProcName, expr) = 0
         continue
-
-      window["score"] := StrDiff(criteria, titleAndProcName)
-    } else {
-      window["score"] := 0
     }
 
+    doScore := scoreMatches && (criteria <> "")
+    window["score"] := doScore ? StrDiff(criteria, titleAndProcName) : 0
 
     windows.Insert(window)
   }
+
+  if (!scoreMatches) 
+    return windows
 
   ; insertion sort to order filtered windows by best match first
   Loop % windows.MaxIndex() - 1
