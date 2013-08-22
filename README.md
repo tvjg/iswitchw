@@ -36,7 +36,7 @@ My thanks to the previous contributors to this script. Without your work to
 lean on and learn from, I would have never started. My primary goals were to
 remove accumulated cruft and publish a version that could be easily forked.
 Previous implementations depended heavily on subroutines storing shared program
-state in undocumented globals.
+state in undesignated globals.
 
 Gui and global variables (including user configurable options) were trimmed to
 a more reasonable minimum. Window icon display code was fixed for 64-bit
