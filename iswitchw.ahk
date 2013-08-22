@@ -10,7 +10,7 @@ filters := ["asticky", "blackbox"]
 ; Set this to true to update the list of windows every time the search is
 ; updated. This is usually not necessary and creates additional overhead, so
 ; it is disabled by default.
-refreshEveryKeystroke = false
+refreshEveryKeystroke := false
 
 ; Only re-filter the possible window matches this often (in ms) at maximum.
 ; When typing is rapid, no sense in running the search on every keypress.
@@ -242,7 +242,7 @@ RefreshWindowList()
   global allwindows, search, switcher_id
   global filters, refreshEveryKeystroke
 
-  if (refreshEveryKeystroke = true or allwindows.MinIndex() = "")
+  if (refreshEveryKeystroke or allwindows.MinIndex() = "")
   {
     WinGet, id, list, , , Program Manager
     Loop, %id%
