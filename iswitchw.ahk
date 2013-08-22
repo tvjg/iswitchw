@@ -1,74 +1,74 @@
-; TODO: Move this to readme file 
+; TODO: Move this to readme file
 
-; 
+;
 ; iswitchw - Incrementally switch between windows using substrings
 ;
-; [CREATED by keyboardfreak, 10 October 2004] 
-;     http://www.autohotkey.com/forum/viewtopic.php?t=1040 
+; [CREATED by keyboardfreak, 10 October 2004]
+;     http://www.autohotkey.com/forum/viewtopic.php?t=1040
 ;
-; [MODIFIED by ezuk, 3 July 2008, changes noted below. Cosmetics only.] 
-;     http://www.autohotkey.com/forum/viewtopic.php?t=33353; 
+; [MODIFIED by ezuk, 3 July 2008, changes noted below. Cosmetics only.]
+;     http://www.autohotkey.com/forum/viewtopic.php?t=33353;
 ;
-; [MODIFIED by jixiuf@gmail.com, 11 June 2011] 
-;     https://github.com/jixiuf/my_autohotkey_scripts/blob/master/ahk_scripts/iswitchw-plus.ahk 
+; [MODIFIED by jixiuf@gmail.com, 11 June 2011]
+;     https://github.com/jixiuf/my_autohotkey_scripts/blob/master/ahk_scripts/iswitchw-plus.ahk
 ;
-; [MODIFIED by dirtyrottenscoundrel, 28 June 2013] 
-;     FIXME: Publish to Github 
+; [MODIFIED by dirtyrottenscoundrel, 28 June 2013]
+;     FIXME: Publish to Github
 ;
-; Using AutoHotkey version: 1.1.11.01 
-; 
-; When this script is triggered via its hotkey the list of titles of 
-; all visible windows appears. The list can be narrowed quickly to a 
-; particular window by typing a substring of a window title. 
-; 
-; When the list is narrowed the desired window can be selected using 
-; the cursor keys and Enter. 
-; 
-; The window selection can be cancelled with Esc. 
-; 
-; The switcher can also be operated with the mouse, although it is 
-; meant to be used from the keyboard. A mouse click activates the 
-; currently selected window. Mouse users may want to change the 
-; activation key to one of the mouse keys. 
-; 
-; 
-; For the idea of this script the credit goes to the creators of the 
-; iswitchb package for the Emacs editor 
-; 
-; 
-;---------------------------------------------------------------------- 
-; 
-; User configuration 
-; 
+; Using AutoHotkey version: 1.1.11.01
+;
+; When this script is triggered via its hotkey the list of titles of
+; all visible windows appears. The list can be narrowed quickly to a
+; particular window by typing a substring of a window title.
+;
+; When the list is narrowed the desired window can be selected using
+; the cursor keys and Enter.
+;
+; The window selection can be cancelled with Esc.
+;
+; The switcher can also be operated with the mouse, although it is
+; meant to be used from the keyboard. A mouse click activates the
+; currently selected window. Mouse users may want to change the
+; activation key to one of the mouse keys.
+;
+;
+; For the idea of this script the credit goes to the creators of the
+; iswitchb package for the Emacs editor
+;
+;
+;----------------------------------------------------------------------
+;
+; User configuration
+;
 
 ; Window titles containing any of the listed substrings are filtered out from
-; the list of windows. 
-filters := ["asticky", "blackbox"] 
+; the list of windows.
+filters := ["asticky", "blackbox"]
 
-; Set this to true to update the list of windows every time the search is  
-; updated. This is usually not necessary and creates additional overhead, so 
-; it is disabled by default. 
+; Set this to true to update the list of windows every time the search is
+; updated. This is usually not necessary and creates additional overhead, so
+; it is disabled by default.
 refreshEveryKeystroke = false
 
-;---------------------------------------------------------------------- 
-; 
-; Global variables 
-; 
+;----------------------------------------------------------------------
+;
+; Global variables
+;
 ;     allwindows     - windows on desktop
-;     windows        - windows in listbox 
-;     search         - the current search string 
-;     switcher_id    - the window ID of the switcher window 
-; 
-;---------------------------------------------------------------------- 
+;     windows        - windows in listbox
+;     search         - the current search string
+;     switcher_id    - the window ID of the switcher window
+;
+;----------------------------------------------------------------------
 
 #NoEnv  ; Recommended for performance and compatibility with future AutoHotkey releases.
 ; #Warn  ; Enable warnings to assist with detecting common errors.
 SendMode Input  ; Recommended for new scripts due to its superior speed and reliability.
 SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 
-AutoTrim, off 
+AutoTrim, off
 
-Gui, +LastFound +AlwaysOnTop -Caption +ToolWindow 
+Gui, +LastFound +AlwaysOnTop -Caption +ToolWindow
 Gui, Color, black,black
 WinSet, Transparent, 225
 Gui, Font, s16 cEEE8D5 bold, Consolas
@@ -77,36 +77,36 @@ Gui, Add, Text,     w100 h30 x6 y8, Search`:
 Gui, Add, Edit,     w500 h30 x110 y4 gSearchChange vsearch,
 Gui, Add, ListView, w854 h510 x4 y40 -VScroll -HScroll -Hdr -Multi Count10 AltSubmit gListViewClick, index|title|proc
 
-;---------------------------------------------------------------------- 
-; 
-; Win+space to activate. 
-; 
+;----------------------------------------------------------------------
+;
+; Win+space to activate.
+;
 #space::
 
 search =
 allwindows := Object()
 
 GuiControl, , Edit1
-Gui, Show, Center, Window Switcher 
-WinGet, switcher_id, ID, A 
-WinSet, AlwaysOnTop, On, ahk_id %switcher_id% 
-ControlFocus, Edit1, ahk_id %switcher_id% 
+Gui, Show, Center, Window Switcher
+WinGet, switcher_id, ID, A
+WinSet, AlwaysOnTop, On, ahk_id %switcher_id%
+ControlFocus, Edit1, ahk_id %switcher_id%
 
-Loop 
-{ 
+Loop
+{
   Input, input, L1, {enter}{esc}{tab}{backspace}{delete}{up}{down}{left}{right}{home}{end}
 
-  if ErrorLevel = EndKey:enter 
-  { 
+  if ErrorLevel = EndKey:enter
+  {
     ActivateWindow()
-    break 
-  } 
-  else if ErrorLevel = EndKey:escape 
-  { 
-    Gui Cancel 
-    break 
-  } 
-  else if ErrorLevel = EndKey:tab 
+    break
+  }
+  else if ErrorLevel = EndKey:escape
+  {
+    Gui Cancel
+    break
+  }
+  else if ErrorLevel = EndKey:tab
   {
     ControlFocus, SysListView321, ahk_id %switcher_id%
 
@@ -116,101 +116,101 @@ Loop
       LV_Modify(1, "Select")
       LV_Modify(1, "Focus")
     } else {
-      ControlSend, SysListView321, {down}, ahk_id %switcher_id% 
+      ControlSend, SysListView321, {down}, ahk_id %switcher_id%
     }
 
     continue
   }
-  else if ErrorLevel = EndKey:backspace 
+  else if ErrorLevel = EndKey:backspace
   {
-    ControlFocus, Edit1, ahk_id %switcher_id% 
-    
+    ControlFocus, Edit1, ahk_id %switcher_id%
+
     if GetKeyState("Ctrl","P")
-      chars = {blind}^{Left}{Del} ; courtesy of VxE: http://www.autohotkey.com/board/topic/35458-backward-search-delete-a-word-to-the-left/#entry223378 
+      chars = {blind}^{Left}{Del} ; courtesy of VxE: http://www.autohotkey.com/board/topic/35458-backward-search-delete-a-word-to-the-left/#entry223378
     else
       chars = {backspace}
-      
-    ControlSend, Edit1, %chars%, ahk_id %switcher_id% 
 
-    continue 
-  } 
-  else if ErrorLevel = EndKey:delete 
-  { 
-    ControlFocus, Edit1, ahk_id %switcher_id% 
+    ControlSend, Edit1, %chars%, ahk_id %switcher_id%
+
+    continue
+  }
+  else if ErrorLevel = EndKey:delete
+  {
+    ControlFocus, Edit1, ahk_id %switcher_id%
     keys := AddModifierKeys("{del}")
-    ControlSend, Edit1, %keys%, ahk_id %switcher_id% 
-    continue 
-  } 
-  else if ErrorLevel = EndKey:up 
-  { 
-    ControlFocus, SysListView321, ahk_id %switcher_id% 
-    ControlSend, SysListView321, {up}, ahk_id %switcher_id% 
-    continue 
-  } 
-  else if ErrorLevel = EndKey:down 
-  { 
-    ControlFocus, SysListView321, ahk_id %switcher_id% 
-    ControlSend, SysListView321, {down}, ahk_id %switcher_id% 
-    continue 
-  } 
-  else if ErrorLevel = EndKey:left 
-  { 
-    ControlFocus, Edit1, ahk_id %switcher_id% 
+    ControlSend, Edit1, %keys%, ahk_id %switcher_id%
+    continue
+  }
+  else if ErrorLevel = EndKey:up
+  {
+    ControlFocus, SysListView321, ahk_id %switcher_id%
+    ControlSend, SysListView321, {up}, ahk_id %switcher_id%
+    continue
+  }
+  else if ErrorLevel = EndKey:down
+  {
+    ControlFocus, SysListView321, ahk_id %switcher_id%
+    ControlSend, SysListView321, {down}, ahk_id %switcher_id%
+    continue
+  }
+  else if ErrorLevel = EndKey:left
+  {
+    ControlFocus, Edit1, ahk_id %switcher_id%
     keys := AddModifierKeys("{left}")
-    ControlSend, Edit1, %keys%, ahk_id %switcher_id% 
-    continue 
-  } 
-  else if ErrorLevel = EndKey:right 
-  { 
-    ControlFocus, Edit1, ahk_id %switcher_id% 
+    ControlSend, Edit1, %keys%, ahk_id %switcher_id%
+    continue
+  }
+  else if ErrorLevel = EndKey:right
+  {
+    ControlFocus, Edit1, ahk_id %switcher_id%
     keys := AddModifierKeys("{right}")
-    ControlSend, Edit1, %keys%, ahk_id %switcher_id% 
-    continue 
-  } 
-  else if ErrorLevel = EndKey:home 
-  { 
-    send % AddModifierKeys("{home}") 
-    continue 
-  } 
-  else if ErrorLevel = EndKey:end 
-  { 
-    send % AddModifierKeys("{end}") 
-    continue 
-  } 
+    ControlSend, Edit1, %keys%, ahk_id %switcher_id%
+    continue
+  }
+  else if ErrorLevel = EndKey:home
+  {
+    send % AddModifierKeys("{home}")
+    continue
+  }
+  else if ErrorLevel = EndKey:end
+  {
+    send % AddModifierKeys("{end}")
+    continue
+  }
 
-  ; FIXME: probably other error level cases 
-  ; should be handled here (interruption?) 
+  ; FIXME: probably other error level cases
+  ; should be handled here (interruption?)
 
-  ControlFocus, Edit1, ahk_id %switcher_id% 
-  Control, EditPaste, %input%, Edit1, ahk_id %switcher_id% 
-} 
+  ControlFocus, Edit1, ahk_id %switcher_id%
+  Control, EditPaste, %input%, Edit1, ahk_id %switcher_id%
+}
 
 exit
 
-;---------------------------------------------------------------------- 
-; 
-; Runs whenever Edit control is updated 
+;----------------------------------------------------------------------
+;
+; Runs whenever Edit control is updated
 SearchChange:
   Gui, Submit, NoHide
-  ; TODO: Debounce this call 
+  ; TODO: Debounce this call
   RefreshWindowList()
   return
 
-;---------------------------------------------------------------------- 
-; 
-; Handle mouse click events on the listview 
-; 
-ListViewClick: 
+;----------------------------------------------------------------------
+;
+; Handle mouse click events on the listview
+;
+ListViewClick:
 if (A_GuiControlEvent = "Normal") {
   SendEvent {enter}
 }
 return
 
-;---------------------------------------------------------------------- 
-; 
-; Checks if user is holding Ctrl and/or Shift, then adds the 
-; appropriate modifiers to the key parameter before returning the 
-; result. 
+;----------------------------------------------------------------------
+;
+; Checks if user is holding Ctrl and/or Shift, then adds the
+; appropriate modifiers to the key parameter before returning the
+; result.
 ;
 AddModifierKeys(key)
 {
@@ -223,9 +223,9 @@ AddModifierKeys(key)
   return key
 }
 
-;---------------------------------------------------------------------- 
-; 
-; Unoptimized array search, returns index of first occurrence or -1 
+;----------------------------------------------------------------------
+;
+; Unoptimized array search, returns index of first occurrence or -1
 ;
 IncludedIn(haystack,needle)
 {
@@ -243,68 +243,68 @@ IncludedIn(haystack,needle)
   return -1
 }
 
-;---------------------------------------------------------------------- 
-; 
-; Refresh the list of windows according to the search criteria 
-; 
-RefreshWindowList() 
+;----------------------------------------------------------------------
+;
+; Refresh the list of windows according to the search criteria
+;
+RefreshWindowList()
 {
-  global allwindows, search, switcher_id 
+  global allwindows, search, switcher_id
   global filters, refreshEveryKeystroke
 
-  if (refreshEveryKeystroke = true or allwindows.MinIndex() = "") 
-  { 
-    WinGet, id, list, , , Program Manager 
-    Loop, %id% 
-    { 
-      StringTrimRight, wid, id%a_index%, 0 
-      WinGetTitle, title, ahk_id %wid% 
-      StringTrimRight, title, title, 0 
+  if (refreshEveryKeystroke = true or allwindows.MinIndex() = "")
+  {
+    WinGet, id, list, , , Program Manager
+    Loop, %id%
+    {
+      StringTrimRight, wid, id%a_index%, 0
+      WinGetTitle, title, ahk_id %wid%
+      StringTrimRight, title, title, 0
 
-      ; FIXME: windows with empty titles? 
-      if title = 
-        continue 
+      ; FIXME: windows with empty titles?
+      if title =
+        continue
 
-      ; don't add the switcher window 
-      if switcher_id = %wid% 
-        continue 
+      ; don't add the switcher window
+      if switcher_id = %wid%
+        continue
 
-      ; don't add titles which match any of the filters 
+      ; don't add titles which match any of the filters
       if IncludedIn(filters, title) > -1
         continue
 
-      ; replace pipe (|) characters in the window title, 
-      ; because Gui Add uses it for separating listbox items 
-      StringReplace, title, title, |, -, all 
+      ; replace pipe (|) characters in the window title,
+      ; because Gui Add uses it for separating listbox items
+      StringReplace, title, title, |, -, all
 
       procName := GetProcessName(wid)
       allwindows.Insert({ "id": wid, "title": title, "procName": procName })
-    } 
-  } 
+    }
+  }
 
-  ; filter the window list according to the search criteria 
+  ; filter the window list according to the search criteria
   windows := FilterWindowList(allwindows, search)
 
   DrawListView(windows)
-} 
+}
 
-;---------------------------------------------------------------------- 
-; 
+;----------------------------------------------------------------------
+;
 ; http://stackoverflow.com/questions/2891514/algorithms-for-fuzzy-matching-strings
 ;
-; Matching in the style of Ido/CtrlP 
+; Matching in the style of Ido/CtrlP
 ;
 ; Returns:
-;   Global filtered list of windows 
+;   Global filtered list of windows
 ;
-; Example: 
-;   explr builds the regex /[^e]*e[^x]*x[^p]*p[^l]*l[^r]*r/i 
-;   which would match explorer  
-;   or likewise 
-;   explr ahk 
-;   which would match Exp.orer - ~/autohotkey, but not Explorer - Documents 
-; 
-; Rules: 
+; Example:
+;   explr builds the regex /[^e]*e[^x]*x[^p]*p[^l]*l[^r]*r/i
+;   which would match explorer
+;   or likewise
+;   explr ahk
+;   which would match Exp.orer - ~/autohotkey, but not Explorer - Documents
+;
+; Rules:
 ;  It is expected that all the letters of the input be in the keyword
 ;  It is expected that the letters in the input be in the same order in the keyword
 ;  The list of keywords returned should be presented in a consistent (reproductible) order
@@ -312,22 +312,22 @@ RefreshWindowList()
 ;
 FilterWindowList(list, criteria)
 {
-  ;TODO: When adding to criteria (ie typing, not erasing), don't rebuild the 
-  ; window lists from the list of all windows on every press -- instead refilter 
+  ;TODO: When adding to criteria (ie typing, not erasing), don't rebuild the
+  ; window lists from the list of all windows on every press -- instead refilter
   ; the existing filtered list.
   global windows := Object()
   filteredList := Object()
 
-  ;TODO: Consider splitting criteria string on spaces and using each term as a 
+  ;TODO: Consider splitting criteria string on spaces and using each term as a
   ; separate filter expression. For example, you are working on an AHK script.
-  ; There are two Explorer windows open to ~/scripts and ~/scripts-old, a GVim 
-  ; instances editing a script in one of the folders, and a browser window open 
-  ; that mentions scripts in the title. This is amongst all the other stuff going 
-  ; on. You begin typing 'scri-'' and now we have several best matches filtered. 
-  ; But I want GVim. Now I might be able to make a more unique match by adding 
-  ; the extension of the file open in Vim: 'scriahk'. Pretty good, but really the 
-  ; first though was Vim. By breaking on space, we could first filter the list 
-  ; for matches on 'scri' for 'script' and then, 'vim' for the match on GVim 
+  ; There are two Explorer windows open to ~/scripts and ~/scripts-old, a GVim
+  ; instances editing a script in one of the folders, and a browser window open
+  ; that mentions scripts in the title. This is amongst all the other stuff going
+  ; on. You begin typing 'scri-'' and now we have several best matches filtered.
+  ; But I want GVim. Now I might be able to make a more unique match by adding
+  ; the extension of the file open in Vim: 'scriahk'. Pretty good, but really the
+  ; first though was Vim. By breaking on space, we could first filter the list
+  ; for matches on 'scri' for 'script' and then, 'vim' for the match on GVim
   ; amongst the remaining windows.
   expr := "i)"
   Loop, parse, criteria
@@ -336,18 +336,18 @@ FilterWindowList(list, criteria)
   }
 
   For idx, window in list
-  { 
-    ; if there is a search string 
-    if criteria <> 
+  {
+    ; if there is a search string
+    if criteria <>
     {
       title := window.title
       procName := window.procName
 
-      ; don't add the windows not matching the search string 
+      ; don't add the windows not matching the search string
       titleAndProcName = %procName% %title%
 
       if RegExMatch(titleAndProcName, expr) = 0
-        continue 
+        continue
 
       window["score"] := Difference(criteria, titleAndProcName)
     } else {
@@ -356,47 +356,47 @@ FilterWindowList(list, criteria)
 
 
     windows.Insert(window)
-  } 
+  }
 
-  ; insertion sort to order filtered windows by best match first 
+  ; insertion sort to order filtered windows by best match first
   Loop % windows.MaxIndex() - 1
   {
     i := A_Index+1
     window := windows[i]
     j := i-1
- 
+
     While j >= 0 and windows[j].score > window.score
     {
       windows[j+1] := windows[j]
       j--
     }
- 
+
     windows[j+1] := window
   }
 
   return windows
 }
 
-;---------------------------------------------------------------------- 
-; 
-; Activate selected window 
-; 
+;----------------------------------------------------------------------
+;
+; Activate selected window
+;
 ActivateWindow()
 {
   global windows
 
-  Gui Submit 
+  Gui Submit
   rowNum:= LV_GetNext(0)
   wid := windows[rowNum].id
-  WinActivate, ahk_id %wid% 
-  
+  WinActivate, ahk_id %wid%
+
   LV_Delete()
 }
 
-;---------------------------------------------------------------------- 
-; 
-; Add window list to listview  
-; 
+;----------------------------------------------------------------------
+;
+; Add window list to listview
+;
 DrawListView(windows)
 {
   windowCount := windows.MaxIndex()
@@ -407,7 +407,7 @@ DrawListView(windows)
   LV_Delete()
 
   iconCount = 0
-  removedRows := Array() 
+  removedRows := Array()
 
   For idx, window in windows
   {
@@ -418,13 +418,13 @@ DrawListView(windows)
     WinGet, style, ExStyle, ahk_id %wid%
 
     ; http://msdn.microsoft.com/en-us/library/windows/desktop/ff700543(v=vs.85).aspx
-    ; Forces a top-level window onto the taskbar when the window is visible. 
+    ; Forces a top-level window onto the taskbar when the window is visible.
     WS_EX_APPWINDOW = 0x40000
     ; A tool window does not appear in the taskbar or in the dialog that appears when the user presses ALT+TAB.
     WS_EX_TOOLWINDOW = 0x80
 
-    isAppWindow := (style & WS_EX_APPWINDOW) 
-    isToolWindow := (style & WS_EX_TOOLWINDOW) 
+    isAppWindow := (style & WS_EX_APPWINDOW)
+    isToolWindow := (style & WS_EX_TOOLWINDOW)
 
     ; http://msdn.microsoft.com/en-us/library/windows/desktop/ms632599(v=vs.85).aspx#owned_windows
     ; An application can use the GetWindow function with the GW_OWNER flag to retrieve a handle to a window's owner.
@@ -432,12 +432,12 @@ DrawListView(windows)
     ownerHwnd := DllCall("GetWindow", "uint", wid, "uint", GW_OWNER)
 
     iconNumber =
-    
-    if (isAppWindow or ( !ownerHwnd and !isToolWindow )) 
+
+    if (isAppWindow or ( !ownerHwnd and !isToolWindow ))
     {
       ; http://www.autohotkey.com/docs/misc/SendMessageList.htm
       WM_GETICON := 0x7F
-      
+
       ; http://msdn.microsoft.com/en-us/library/windows/desktop/ms632625(v=vs.85).aspx
       ICON_BIG := 1
       ICON_SMALL2 := 2
@@ -458,25 +458,25 @@ DrawListView(windows)
 
           if (iconHandle = 0)
           {
-            ; http://msdn.microsoft.com/en-us/library/windows/desktop/ms633581(v=vs.85).aspx 
-            ; To write code that is compatible with both 32-bit and 64-bit 
-            ; versions of Windows, use GetClassLongPtr. When compiling for 32-bit 
-            ; Windows, GetClassLongPtr is defined as a call to the GetClassLong 
+            ; http://msdn.microsoft.com/en-us/library/windows/desktop/ms633581(v=vs.85).aspx
+            ; To write code that is compatible with both 32-bit and 64-bit
+            ; versions of Windows, use GetClassLongPtr. When compiling for 32-bit
+            ; Windows, GetClassLongPtr is defined as a call to the GetClassLong
             ; function.
-            iconHandle := DllCall("GetClassLongPtr", "uint", wid, "int", -14) ; GCL_HICON is -14 
+            iconHandle := DllCall("GetClassLongPtr", "uint", wid, "int", -14) ; GCL_HICON is -14
 
             if (iconHandle = 0)
             {
-              iconHandle := DllCall("GetClassLongPtr", "uint", wid, "int", -34) ; GCL_HICONSM is -34 
+              iconHandle := DllCall("GetClassLongPtr", "uint", wid, "int", -34) ; GCL_HICONSM is -34
 
               if (iconHandle = 0) {
-                iconHandle := DllCall("LoadIcon", "uint", 0, "uint", 32512) ; IDI_APPLICATION is 32512 
+                iconHandle := DllCall("LoadIcon", "uint", 0, "uint", 32512) ; IDI_APPLICATION is 32512
               }
             }
           }
         }
       }
-      
+
       if (iconHandle <> 0)
         iconNumber := DllCall("ImageList_ReplaceIcon", UInt, imageListID, Int, -1, UInt, iconHandle) + 1
 
@@ -492,16 +492,16 @@ DrawListView(windows)
       LV_Add("Icon" . iconNumber, iconCount, window.procName, title)
     } else {
       removedRows.Insert(idx)
-    } 
+    }
   }
 
-  ; Don't draw rows without icons.  
+  ; Don't draw rows without icons.
   windowCount-=removedRows.MaxIndex()
   For key,rowNum in removedRows
   {
     windows.Remove(rowNum)
   }
-    
+
   LV_Modify(1, "Select")
   LV_Modify(1, "Focus")
 
@@ -510,33 +510,33 @@ DrawListView(windows)
   LV_ModifyCol(3,650)
 }
 
-;---------------------------------------------------------------------- 
-; 
-; Get process name for given window id  
-; 
-GetProcessName(wid) 
+;----------------------------------------------------------------------
+;
+; Get process name for given window id
+;
+GetProcessName(wid)
 {
   WinGet, name, ProcessName, ahk_id %wid%
   StringGetPos, pos, name, .
-  if ErrorLevel <> 1 
+  if ErrorLevel <> 1
   {
     StringLeft, name, name, %pos%
   }
-    
+
   return name
 }
 
-;---------------------------------------------------------------------- 
+;----------------------------------------------------------------------
 ;
 ; http://www.autohotkey.com/board/topic/54987-sift3-super-fast-and-accurate-string-distance-algorithm/#entry345400
-; 
-; returns a float: between "0.0 = identical" and "1.0 = nothing in common" 
-; 
+;
+; returns a float: between "0.0 = identical" and "1.0 = nothing in common"
+;
 Difference(string1, string2, maxOffset=5) {    ;
   ; either identical or (assumption:) "only one" char with different case
   If (string1 = string2)
-    Return (string1 == string2 ? 0/1 : 0.2/StrLen(string1))    
-  
+    Return (string1 == string2 ? 0/1 : 0.2/StrLen(string1))
+
   If (string1 = "" OR string2 = "")
     Return (string1 = string2 ? 0/1 : 1/1)
 
