@@ -26,11 +26,12 @@ scoreMatches := true
 ;
 ; Global variables
 ;
-;     allwindows     - windows on desktop
-;     windows        - windows in listbox
-;     search         - the current search string
-;     switcher_id    - the window ID of the switcher window
-;     debounced      - true when its ok to re-filter
+;     allwindows       - windows on desktop
+;     windows          - windows in listbox
+;     search           - the current search string
+;     lastSearchLength - length of previous search string
+;     switcher_id      - the window ID of the switcher window
+;     debounced        - true when its ok to re-filter
 ;
 ;----------------------------------------------------------------------
 
@@ -57,6 +58,7 @@ Gui, Add, ListView, w854 h510 x4 y40 -VScroll -HScroll -Hdr -Multi Count10 AltSu
 #space::
 
 search =
+lastSearchLength := 0
 debounced := true
 allwindows := Object()
 
@@ -239,7 +241,8 @@ IncludedIn(haystack,needle)
 ;
 RefreshWindowList()
 {
-  global allwindows, search, switcher_id
+  global allwindows, windows
+  global search, lastSearchLength, switcher_id
   global filters, refreshEveryKeystroke
 
   if (refreshEveryKeystroke or allwindows.MinIndex() = "")
@@ -272,8 +275,15 @@ RefreshWindowList()
     }
   }
 
-  ; filter the window list according to the search criteria
-  windows := FilterWindowList(allwindows, search)
+  ; When adding to criteria (ie typing, not erasing), refilter
+  ; the existing filtered list. This should be sane since the even if we enter
+  ; a new letter at the beginning of the search term, all shown matches should
+  ; still contain the previous search term as a 'substring'.
+  currentSearchLength := StrLen(search)
+  useExiting := (currentSearchLength > lastSearchLength)
+  lastSearchLength := currentSearchLength
+
+  windows := FilterWindowList(useExisting ? windows : allwindows, search)
 
   DrawListView(windows)
 }
@@ -302,11 +312,8 @@ RefreshWindowList()
 ;
 FilterWindowList(list, criteria)
 {
-  ;TODO: When adding to criteria (ie typing, not erasing), don't rebuild the
-  ; window lists from the list of all windows on every press -- instead refilter
-  ; the existing filtered list.
-  global windows, scoreMatches
-  windows := Object(), filteredList := Object()
+  global scoreMatches
+  filteredList := Object()
 
   ;TODO: Consider splitting criteria string on spaces and using each term as a
   ; separate filter expression. For example, you are working on an AHK script.
@@ -343,29 +350,29 @@ FilterWindowList(list, criteria)
     doScore := scoreMatches && (criteria <> "")
     window["score"] := doScore ? StrDiff(criteria, titleAndProcName) : 0
 
-    windows.Insert(window)
+    filteredList.Insert(window)
   }
 
   if (!scoreMatches) 
-    return windows
+    return filteredList
 
   ; insertion sort to order filtered windows by best match first
-  Loop % windows.MaxIndex() - 1
+  Loop % filteredList.MaxIndex() - 1
   {
     i := A_Index+1
-    window := windows[i]
+    window := filteredList[i]
     j := i-1
 
-    While j >= 0 and windows[j].score > window.score
+    While j >= 0 and filteredList[j].score > window.score
     {
-      windows[j+1] := windows[j]
+      filteredList[j+1] := filteredList[j]
       j--
     }
 
-    windows[j+1] := window
+    filteredList[j+1] := window
   }
 
-  return windows
+  return filteredList
 }
 
 ;----------------------------------------------------------------------
