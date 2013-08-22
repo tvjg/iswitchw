@@ -503,9 +503,9 @@ DrawListView(windows)
   LV_Modify(1, "Select")
   LV_Modify(1, "Focus")
 
-  LV_ModifyCol(1,60)
+  LV_ModifyCol(1,70)
   LV_ModifyCol(2,140)
-  LV_ModifyCol(3,650)
+  LV_ModifyCol(3,640)
 }
 
 ;----------------------------------------------------------------------
