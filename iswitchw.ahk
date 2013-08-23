@@ -2,6 +2,8 @@
 ;
 ; User configuration
 ;
+#SingleInstance force
+#NoTrayIcon
 
 ; Window titles containing any of the listed substrings are filtered out from
 ; the initial list of windows presented when iswitchw is activated. Can be
@@ -89,7 +91,7 @@ ControlFocus, Edit1, ahk_id %switcher_id%
 
 Loop
 {
-  Input, input, L1, {enter}{esc}{tab}{backspace}{delete}{up}{down}{left}{right}{home}{end}
+  Input, input, L1, {enter}{esc}{tab}{backspace}{delete}{up}{down}{left}{right}{home}{end}{F4}
 
   if ErrorLevel = EndKey:enter
   {
@@ -172,9 +174,11 @@ Loop
     send % AddModifierKeys("{end}")
     continue
   }
-
-  ; FIXME: probably other error level cases
-  ; should be handled here (interruption?)
+  else if ErrorLevel = EndKey:F4
+  {
+    if GetKeyState("Alt","P")
+      ExitApp
+  }
 
   ControlFocus, Edit1, ahk_id %switcher_id%
   Control, EditPaste, %input%, Edit1, ahk_id %switcher_id%

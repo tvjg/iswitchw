@@ -23,6 +23,15 @@ iswitchw strives to be as intuitive as possible.
 * Click a title to activate a window with the mouse  
 * Any other typing should be passed through to the search  
 
+By default, iswitchw is restricted to a single instance and hides itself from
+the tray. Run the script again at any time to replace the running instance. If
+you want to quit the script entirely, activate iswitchw with `Win + Space` and
+then press `Alt + F4`.
+
+If you want iswitchw to run when Windows starts, make a shortcut to the
+iswitchw.ahk file in the folder `%APPDATA%\Microsoft\Windows\Start
+Menu\Programs\Startup`. See [here][start-on-boot] also.
+
 ### Options
 
 User configurable options are presented at the top of the ahk script.
@@ -61,6 +70,7 @@ readable to the majority of programmers.
 
 [ido]: http://www.emacswiki.org/emacs/InteractivelyDoThings
 [ctrlp]: http://kien.github.io/ctrlp.vim/
+[start-on-boot]: http://windows.microsoft.com/en-us/windows-vista/run-a-program-automatically-when-windows-starts
 [iswitchb]: http://www.gnu.org/software/emacs/manual/html_node/emacs/Iswitchb.html
 [hist1]: http://www.autohotkey.com/forum/viewtopic.php?t=1040
 [hist2]: http://www.autohotkey.com/forum/viewtopic.php?t=33353
