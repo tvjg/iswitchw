@@ -237,51 +237,61 @@ IncludedIn(haystack,needle)
 
 ;----------------------------------------------------------------------
 ;
+; Fetch info on all active windows
+;
+GetAllWindows()
+{
+  global switcher_id, filters
+  windows := Object()
+
+  WinGet, id, list, , , Program Manager
+  Loop, %id%
+  {
+    StringTrimRight, wid, id%a_index%, 0
+    WinGetTitle, title, ahk_id %wid%
+    StringTrimRight, title, title, 0
+
+    ; FIXME: windows with empty titles?
+    if title =
+      continue
+
+    ; don't add the switcher window
+    if switcher_id = %wid%
+      continue
+
+    ; don't add titles which match any of the filters
+    if IncludedIn(filters, title) > -1
+      continue
+
+    ; replace pipe (|) characters in the window title,
+    ; because Gui Add uses it for separating listbox items
+    StringReplace, title, title, |, -, all
+
+    procName := GetProcessName(wid)
+    windows.Insert({ "id": wid, "title": title, "procName": procName })
+  }
+
+  return windows
+}
+
+;----------------------------------------------------------------------
+;
 ; Refresh the list of windows according to the search criteria
 ;
 RefreshWindowList()
 {
   global allwindows, windows
-  global search, lastSearch, switcher_id
-  global filters, refreshEveryKeystroke
-
+  global search, lastSearch, refreshEveryKeystroke
   uninitialized := (allwindows.MinIndex() = "")
 
   if (uninitialized || refreshEveryKeystroke)
-  {
-    WinGet, id, list, , , Program Manager
-    Loop, %id%
-    {
-      StringTrimRight, wid, id%a_index%, 0
-      WinGetTitle, title, ahk_id %wid%
-      StringTrimRight, title, title, 0
-
-      ; FIXME: windows with empty titles?
-      if title =
-        continue
-
-      ; don't add the switcher window
-      if switcher_id = %wid%
-        continue
-
-      ; don't add titles which match any of the filters
-      if IncludedIn(filters, title) > -1
-        continue
-
-      ; replace pipe (|) characters in the window title,
-      ; because Gui Add uses it for separating listbox items
-      StringReplace, title, title, |, -, all
-
-      procName := GetProcessName(wid)
-      allwindows.Insert({ "id": wid, "title": title, "procName": procName })
-    }
-  }
+    allwindows := GetAllWindows()
 
   currentSearch := Trim(search)
   if ((currentSearch == lastSearch) && !uninitialized) {
     return
   }
-    
+
   ; When adding to criteria (ie typing, not erasing), refilter
   ; the existing filtered list. This should be sane since the even if we enter
   ; a new letter at the beginning of the search term, all shown matches should
