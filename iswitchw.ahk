@@ -4,8 +4,10 @@
 ;
 
 ; Window titles containing any of the listed substrings are filtered out from
-; the list of windows.
-filters := ["asticky", "blackbox"]
+; the initial list of windows presented when iswitchw is activated. Can be
+; useful for things like  hiding improperly configured tool windows or screen
+; capture software during demos.
+filters := []
 
 ; Set this to true to update the list of windows every time the search is
 ; updated. This is usually not necessary and creates additional overhead, so
