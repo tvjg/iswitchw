@@ -24,6 +24,23 @@ debounceDuration = 250
 ; presented in the order given by Windows.
 scoreMatches := true
 
+; Split search string on spaces and use each term as an additional
+; filter expression.
+;
+; For example, you are working on an AHK script:
+;  - There are two Explorer windows open to ~/scripts and ~/scripts-old.
+;  - Two Vim instances editing scripts in each one of those folders.
+;  - A browser window open that mentions scripts in the title
+;
+; This is amongst all the other stuff going on. You bring up iswitchw and
+; begin typing 'scrip'. Now, we have several best matches filtered.  But I
+; want the Vim windows only. Now I might be able to make a more unique match by
+; adding the extension of the file open in Vim: 'scripahk'. Pretty good, but
+; really the first thought was process name -- Vim. By breaking on space, we
+; can first filter the list for matches on 'scrip' for 'script' and then,
+; 'vim' in order to match by Vim amongst the remaining windows.
+useMultipleTerms := true
+
 ;----------------------------------------------------------------------
 ;
 ; Global variables
@@ -308,12 +325,67 @@ RefreshWindowList()
 
 ;----------------------------------------------------------------------
 ;
+; Filter window list with given search criteria
+;
+FilterWindowList(list, criteria)
+{
+  global scoreMatches, useMultipleTerms
+  filteredList := Object(), expressions := Object()
+  lastTermInSearch := criteria, doScore := scoreMatches
+
+  ; If useMultipleTerms, do multiple passes with filter expressions
+  if (useMultipleTerms) {
+    StringSplit, searchTerms, criteria, %A_space%
+
+    Loop, %searchTerms0%
+    {
+      term := searchTerms%A_index%
+      lastTermInSearch := term
+
+      expr := BuildFilterExpression(term)
+      expressions.Insert(expr)
+    }
+  } else if (criteria <> "") {
+    expr := BuildFilterExpression(criteria)
+    expressions[0] := expr
+  }
+
+  atNextWindow:
+  For idx, window in list
+  {
+    ; if there is a search string
+    if criteria <>
+    {
+      title := window.title
+      procName := window.procName
+
+      ; don't add the windows not matching the search string
+      titleAndProcName = %procName% %title%
+
+      For idx, expr in expressions
+      {
+        if RegExMatch(titleAndProcName, expr) = 0
+          continue atNextWindow
+      }
+    }
+
+    doScore := scoreMatches && (criteria <> "") && (lastTermInSearch <> "")
+    window["score"] := doScore ? StrDiff(lastTermInSearch, titleAndProcName) : 0
+
+    filteredList.Insert(window)
+  }
+
+  return (doScore ? SortByScore(filteredList) : filteredList)
+}
+
+;----------------------------------------------------------------------
+;
 ; http://stackoverflow.com/questions/2891514/algorithms-for-fuzzy-matching-strings
 ;
 ; Matching in the style of Ido/CtrlP
 ;
 ; Returns:
-;   Global filtered list of windows
+;   Regex for provided search term 
 ;
 ; Example:
 ;   explr builds the regex /[^e]*e[^x]*x[^p]*p[^l]*l[^r]*r/i
@@ -328,69 +400,39 @@ RefreshWindowList()
 ;  The list of keywords returned should be presented in a consistent (reproductible) order
 ;  The algorithm should be case insensitive
 ;
-FilterWindowList(list, criteria)
+BuildFilterExpression(term)
 {
-  global scoreMatches
-  filteredList := Object()
-
-  ;TODO: Consider splitting criteria string on spaces and using each term as a
-  ; separate filter expression. For example, you are working on an AHK script.
-  ; There are two Explorer windows open to ~/scripts and ~/scripts-old, a GVim
-  ; instances editing a script in one of the folders, and a browser window open
-  ; that mentions scripts in the title. This is amongst all the other stuff going
-  ; on. You begin typing 'scri-'' and now we have several best matches filtered.
-  ; But I want GVim. Now I might be able to make a more unique match by adding
-  ; the extension of the file open in Vim: 'scriahk'. Pretty good, but really the
-  ; first though was Vim. By breaking on space, we could first filter the list
-  ; for matches on 'scri' for 'script' and then, 'vim' for the match on GVim
-  ; amongst the remaining windows.
   expr := "i)"
-  Loop, parse, criteria
+  Loop, parse, term
   {
     expr .= "[^" . A_LoopField . "]*" . A_LoopField
   }
 
-  For idx, window in list
-  {
-    ; if there is a search string
-    if criteria <>
-    {
-      title := window.title
-      procName := window.procName
+  return expr
+}
 
-      ; don't add the windows not matching the search string
-      titleAndProcName = %procName% %title%
-
-      if RegExMatch(titleAndProcName, expr) = 0
-        continue
-    }
-
-    doScore := scoreMatches && (criteria <> "")
-    window["score"] := doScore ? StrDiff(criteria, titleAndProcName) : 0
-
-    filteredList.Insert(window)
-  }
-
-  if (!scoreMatches) 
-    return filteredList
-
-  ; insertion sort to order filtered windows by best match first
-  Loop % filteredList.MaxIndex() - 1
+;------------------------------------------------------------------------
+;
+; Perform insertion sort on list, comparing on each item's score property 
+;
+SortByScore(list)
+{
+  Loop % list.MaxIndex() - 1
   {
     i := A_Index+1
-    window := filteredList[i]
+    window := list[i]
     j := i-1
 
-    While j >= 0 and filteredList[j].score > window.score
+    While j >= 0 and list[j].score > window.score
     {
-      filteredList[j+1] := filteredList[j]
+      list[j+1] := list[j]
       j--
     }
 
-    filteredList[j+1] := window
+    list[j+1] := window
   }
 
-  return filteredList
+  return list
 }
 
 ;----------------------------------------------------------------------
