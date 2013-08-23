@@ -19,7 +19,7 @@ debounceDuration = 250
 ; When true, filtered matches are scored and the best matches are presented
 ; first. This helps account for simple spelling mistakes such as transposed
 ; letters e.g. googel, vritualbox. When false, title matches are filtered and
-; presented in the order given by Windows. 
+; presented in the order given by Windows.
 scoreMatches := true
 
 ;----------------------------------------------------------------------
@@ -244,7 +244,7 @@ RefreshWindowList()
   global allwindows, windows
   global search, lastSearch, switcher_id
   global filters, refreshEveryKeystroke
-  
+
   uninitialized := (allwindows.MinIndex() = "")
 
   if (uninitialized || refreshEveryKeystroke)
@@ -308,7 +308,7 @@ RefreshWindowList()
 ;   which would match explorer
 ;   or likewise
 ;   explr ahk
-;   which would match Exp.orer - ~/autohotkey, but not Explorer - Documents
+;   which would match Explorer - ~/autohotkey, but not Explorer - Documents
 ;
 ; Rules:
 ;  It is expected that all the letters of the input be in the keyword
