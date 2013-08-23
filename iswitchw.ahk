@@ -26,12 +26,12 @@ scoreMatches := true
 ;
 ; Global variables
 ;
-;     allwindows       - windows on desktop
-;     windows          - windows in listbox
-;     search           - the current search string
-;     lastSearchLength - length of previous search string
-;     switcher_id      - the window ID of the switcher window
-;     debounced        - true when its ok to re-filter
+;     allwindows  - windows on desktop
+;     windows     - windows in listbox
+;     search      - the current search string
+;     lastSearch  - previous search string
+;     switcher_id - the window ID of the switcher window
+;     debounced   - true when its ok to re-filter
 ;
 ;----------------------------------------------------------------------
 
@@ -58,7 +58,7 @@ Gui, Add, ListView, w854 h510 x4 y40 -VScroll -HScroll -Hdr -Multi Count10 AltSu
 #space::
 
 search =
-lastSearchLength := 0
+lastSearch =
 debounced := true
 allwindows := Object()
 
@@ -242,10 +242,12 @@ IncludedIn(haystack,needle)
 RefreshWindowList()
 {
   global allwindows, windows
-  global search, lastSearchLength, switcher_id
+  global search, lastSearch, switcher_id
   global filters, refreshEveryKeystroke
+  
+  uninitialized := (allwindows.MinIndex() = "")
 
-  if (refreshEveryKeystroke or allwindows.MinIndex() = "")
+  if (uninitialized || refreshEveryKeystroke)
   {
     WinGet, id, list, , , Program Manager
     Loop, %id%
@@ -275,15 +277,19 @@ RefreshWindowList()
     }
   }
 
+  currentSearch := Trim(search)
+  if ((currentSearch == lastSearch) && !uninitialized) {
+    return
+  }
+    
   ; When adding to criteria (ie typing, not erasing), refilter
   ; the existing filtered list. This should be sane since the even if we enter
   ; a new letter at the beginning of the search term, all shown matches should
   ; still contain the previous search term as a 'substring'.
-  currentSearchLength := StrLen(search)
-  useExiting := (currentSearchLength > lastSearchLength)
-  lastSearchLength := currentSearchLength
+  useExisting := (StrLen(currentSearch) > StrLen(lastSearch))
+  lastSearch := currentSearch
 
-  windows := FilterWindowList(useExisting ? windows : allwindows, search)
+  windows := FilterWindowList(useExisting ? windows : allwindows, currentSearch)
 
   DrawListView(windows)
 }
