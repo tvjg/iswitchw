@@ -44,6 +44,7 @@ User configurable options are presented at the top of the ahk script.
 
 * [ ] Tweak scoring algorithm to work better with long window titles
 * [ ] Add better explanations/examples for configuration options
+* [ ] Move hotkey binding and options into ini file
 
 ### History
 
