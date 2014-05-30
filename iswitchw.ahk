@@ -450,7 +450,19 @@ ActivateWindow()
   Gui Submit
   rowNum:= LV_GetNext(0)
   wid := windows[rowNum].id
-  WinActivate, ahk_id %wid%
+
+  ; In some cases, calling WinMinimize minimizes the window, but it retains its
+  ; focus preventing WinActivate from raising window.
+  IfWinActive, ahk_id %wid%
+  {
+    WinGet, state, MinMax, ahk_id %wid%
+    if (state = -1)
+    {
+      WinRestore, ahk_id %wid%
+    }
+  } else {
+    WinActivate, ahk_id %wid%
+  }
 
   LV_Delete()
 }
