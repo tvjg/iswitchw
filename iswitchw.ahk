@@ -91,7 +91,7 @@ ControlFocus, Edit1, ahk_id %switcher_id%
 
 Loop
 {
-  Input, input, L1, {enter}{esc}{tab}{backspace}{delete}{up}{down}{left}{right}{home}{end}{F4}
+  Input, input, L1, {enter}{esc}{tab}{backspace}{delete}{up}{down}{left}{right}{home}{end}{F4}{a}
 
   if ErrorLevel = EndKey:enter
   {
@@ -116,6 +116,19 @@ Loop
       ControlSend, SysListView321, {down}, ahk_id %switcher_id%
     }
 
+    continue
+  }
+  else if ErrorLevel = EndKey:a
+  {
+    ControlFocus, Edit1, ahk_id %switcher_id%
+
+    if GetKeyState("Ctrl","P")      
+      chars = {blind}{Home}+{End}
+    else
+      chars := AddModifierKeys("{a}")
+    
+    ControlSend, Edit1, %chars%, ahk_id %switcher_id%
+    
     continue
   }
   else if ErrorLevel = EndKey:backspace
