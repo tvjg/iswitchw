@@ -5,20 +5,22 @@
 #SingleInstance force
 #NoTrayIcon
 
-; Window titles containing any of the listed substrings are filtered out from
-; the initial list of windows presented when iswitchw is activated. Can be
+; Use small icons in the listview
+Global compact := true
+
+; Window titles containing any of the listed substrings are filtered out fromin
 ; useful for things like  hiding improperly configured tool windows or screen
 ; capture software during demos.
 filters := []
 
 ; Set this to true to update the list of windows every time the search is
 ; updated. This is usually not necessary and creates additional overhead, so
-; it is disabled by default.
+; it is disabled by default. 
 refreshEveryKeystroke := false
 
 ; Only re-filter the possible window matches this often (in ms) at maximum.
 ; When typing is rapid, no sense in running the search on every keypress.
-debounceDuration = 250
+debounceDuration := 250
 
 ; When true, filtered matches are scored and the best matches are presented
 ; first. This helps account for simple spelling mistakes such as transposed
@@ -61,130 +63,103 @@ useMultipleTerms := true
 SendMode Input  ; Recommended for new scripts due to its superior speed and reliability.
 SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 
+OnMessage(0x201, "WM_LBUTTONDOWN") ; Allows clicking and dragging the window
+
+;These remove the borders, while allowing the window to be resizable
+;https://autohotkey.com/board/topic/23969-resizable-window-border/#entry155480
+OnMessage(0x84, "WM_NCHITTEST")
+OnMessage(0x83, "WM_NCCALCSIZE")
+OnMessage(0x86, "WM_NCACTIVATE")
+
 AutoTrim, off
 
-Gui, +LastFound +AlwaysOnTop -Caption +ToolWindow
-Gui, Color, black,black
+Gui, +LastFound +AlwaysOnTop -Caption +ToolWindow +Resize +Hwndswitcher_id
+Gui, Color, black, 191919
+; 2e2d2d, 262525
 WinSet, Transparent, 225
-Gui, Font, s16 cEEE8D5 bold, Consolas
-Gui, Margin, 4, 4
-Gui, Add, Text,     w100 h30 x6 y8, Search`:
-Gui, Add, Edit,     w500 h30 x110 y4 gSearchChange vsearch,
-Gui, Add, ListView, w854 h510 x4 y40 -VScroll -HScroll -Hdr -Multi Count10 AltSubmit gListViewClick, index|title|proc
+Gui, Margin, 8, 10
+Gui, Font, s14 cEEE8D5, Segoe MDL2 Assets
+Gui, Add, Text,     h30 xm+5 ym+3, % Chr(0xE721)
+Gui, Font, s10 cEEE8D5, Segoe UI
+Gui, Add, Edit,     w420 h25 x+10 ym gSearchChange vsearch -E0x200,
+Gui, Add, ListView, w490 h500 x9 y+4 -VScroll -HScroll -Hdr -Multi Count10 AltSubmit vlist gListViewClick -E0x200, index|title|proc
+Gui, Show, , Window Switcher
+WinHide, ahk_id %switcher_id%
+
+
+; Add hotkeys for number row and pad, to focus corresponding item number in the list 
+numkey := [1, 2, 3, 4, 5, 6, 7, 8, 9, 0, "Numpad1", "Numpad2", "Numpad3", "Numpad4", "Numpad5", "Numpad6", "Numpad7", "Numpad8", "Numpad9", "Numpad0"]
+for i, e in numkey {
+    num := StrReplace(e, "Numpad")
+    KeyFunc := Func("ActivateWindow").Bind(num = 0 ? 10 : num)
+    Hotkey, IfWinActive, % "ahk_id" switcher_id
+    Hotkey, % "#" e, % KeyFunc
+}
+
+Return
 
 ;----------------------------------------------------------------------
 ;
 ; Win+space to activate.
 ;
 #space::
-
 search =
 lastSearch =
 debounced := true
 allwindows := Object()
-
 GuiControl, , Edit1
-Gui, Show, Center, Window Switcher
-WinGet, switcher_id, ID, A
+WinShow, ahk_id %switcher_id%
 WinSet, AlwaysOnTop, On, ahk_id %switcher_id%
+WinGetPos, , , w, h, ahk_id %switcher_id%
+WinSet, Region , 0-0 w%w% h%h% R15-15, ahk_id %switcher_id%
+WinActivate, ahk_id %switcher_id%
 ControlFocus, Edit1, ahk_id %switcher_id%
+Return
 
-Loop
-{
-  Input, input, L1, {enter}{esc}{tab}{backspace}{delete}{up}{down}{left}{right}{home}{end}{F4}
+#If WinActive("ahk_id" switcher_id)
+Enter::       ;Activate window
+Escape::      ;Close window
+^Backspace::  ;Clear text
+Down::        ;Next row
+Tab::         
+Up::          ;Previous row
++Tab::        
+PgUp::        ;Jump up 4 rows
+PgDn::        ;Jump down 4 rows
+Home::        ;Jump to top
+End::         ;Jump to bottom
+!F4::         ;Quit
+  SetKeyDelay, -1
+  Switch A_ThisHotkey {
+    Case "Enter":       ActivateWindow()
+    Case "Escape":      WinHide, ahk_id %switcher_id%
+    Case "^Backspace":  ControlSend, Edit1, ^+{left}{Backspace}, ahk_id %switcher_id%
+    Case "Home":        LV_Modify(1, "Select Focus Vis")
+    Case "End":         LV_Modify(LV_GetCount(), "Select Focus Vis")
+    Case "!F4":         ExitApp
+    Case "Tab", "+Tab", "Up", "Down", "PgUp", "PgDn":
+      page := InStr(A_ThisHotkey,"Pg")
+      row := LV_GetNext()
+      jump := page ? 4 : 1
+      If (row = 0)
+        row := 1
+      row := GetKeyState("Shift") || InStr(A_ThisHotkey,"Up") ? row - jump : row + jump
+      If (row > LV_GetCount())
+        row := page ? LV_GetCount() : 1
+      Else If (row < 1)
+        row := page ? 1 : LV_GetCount()  
+      LV_Modify(row, "Select Focus Vis")
+  }
+Return
 
-  if ErrorLevel = EndKey:enter
-  {
-    ActivateWindow()
-    break
-  }
-  else if ErrorLevel = EndKey:escape
-  {
-    Gui Cancel
-    break
-  }
-  else if ErrorLevel = EndKey:tab
-  {
-    ControlFocus, SysListView321, ahk_id %switcher_id%
-
-    ; When on last row, wrap tab next to top of list.
-    if LV_GetNext(0) = LV_GetCount()
-    {
-      LV_Modify(1, "Select")
-      LV_Modify(1, "Focus")
-    } else {
-      ControlSend, SysListView321, {down}, ahk_id %switcher_id%
-    }
-
-    continue
-  }
-  else if ErrorLevel = EndKey:backspace
-  {
-    ControlFocus, Edit1, ahk_id %switcher_id%
-
-    if GetKeyState("Ctrl","P")
-      chars = {blind}^{Left}{Del} ; courtesy of VxE: http://www.autohotkey.com/board/topic/35458-backward-search-delete-a-word-to-the-left/#entry223378
-    else
-      chars = {backspace}
-
-    ControlSend, Edit1, %chars%, ahk_id %switcher_id%
-
-    continue
-  }
-  else if ErrorLevel = EndKey:delete
-  {
-    ControlFocus, Edit1, ahk_id %switcher_id%
-    keys := AddModifierKeys("{del}")
-    ControlSend, Edit1, %keys%, ahk_id %switcher_id%
-    continue
-  }
-  else if ErrorLevel = EndKey:up
-  {
-    ControlFocus, SysListView321, ahk_id %switcher_id%
-    ControlSend, SysListView321, {up}, ahk_id %switcher_id%
-    continue
-  }
-  else if ErrorLevel = EndKey:down
-  {
-    ControlFocus, SysListView321, ahk_id %switcher_id%
-    ControlSend, SysListView321, {down}, ahk_id %switcher_id%
-    continue
-  }
-  else if ErrorLevel = EndKey:left
-  {
-    ControlFocus, Edit1, ahk_id %switcher_id%
-    keys := AddModifierKeys("{left}")
-    ControlSend, Edit1, %keys%, ahk_id %switcher_id%
-    continue
-  }
-  else if ErrorLevel = EndKey:right
-  {
-    ControlFocus, Edit1, ahk_id %switcher_id%
-    keys := AddModifierKeys("{right}")
-    ControlSend, Edit1, %keys%, ahk_id %switcher_id%
-    continue
-  }
-  else if ErrorLevel = EndKey:home
-  {
-    send % AddModifierKeys("{home}")
-    continue
-  }
-  else if ErrorLevel = EndKey:end
-  {
-    send % AddModifierKeys("{end}")
-    continue
-  }
-  else if ErrorLevel = EndKey:F4
-  {
-    if GetKeyState("Alt","P")
-      ExitApp
-  }
-
-  ControlFocus, Edit1, ahk_id %switcher_id%
-  Control, EditPaste, %input%, Edit1, ahk_id %switcher_id%
-}
-
-exit
+; Resizes the search field and list to the GUI width
+GuiSize:
+  GuiControl, Move, list, % "w" A_GuiWidth - 20 " h" A_GuiHeight - 50
+  GuiControl, Move, search, % "w" A_GuiWidth - 52
+  LV_ModifyCol(3,A_GuiWidth - (compact ? 190 : 210)) ; Resizes column 3 to match gui width
+  WinGetPos, , , w, h, ahk_id %switcher_id%
+  WinSet, Region , 0-0 w%w% h%h% R15-15, ahk_id %switcher_id%  ;Sets window region to round off corners
+Return
 
 ;----------------------------------------------------------------------
 ;
@@ -217,7 +192,7 @@ Debounce:
 ;
 ListViewClick:
   if (A_GuiControlEvent = "Normal") {
-    SendEvent {enter}
+    ActivateWindow()
   }
   return
 
@@ -374,7 +349,7 @@ FilterWindowList(list, criteria)
     }
 
     doScore := scoreMatches && (criteria <> "") && (lastTermInSearch <> "")
-    window["score"] := doScore ? StrDiff(lastTermInSearch, titleAndProcName) : 0
+    window["score"] := doScore ? FuzzySearch(lastTermInSearch, titleAndProcName) : 0
 
     filteredList.Insert(window)
   }
@@ -436,19 +411,20 @@ SortByScore(list)
     list[j+1] := window
   }
 
-  return list
+return list
 }
 
 ;----------------------------------------------------------------------
 ;
 ; Activate selected window
 ;
-ActivateWindow()
+ActivateWindow(rowNum := "")
 {
   global windows
 
   Gui Submit
-  rowNum:= LV_GetNext(0)
+  If !rowNum
+    rowNum:= LV_GetNext(0)
   wid := windows[rowNum].id
 
   ; In some cases, calling WinMinimize minimizes the window, but it retains its
@@ -473,8 +449,9 @@ ActivateWindow()
 ;
 DrawListView(windows)
 {
+  Critical
   windowCount := windows.MaxIndex()
-  imageListID := IL_Create(windowCount, 1, 1)
+  imageListID := IL_Create(windowCount, 1, compact ? 0 : 1)
 
   ; Attach the ImageLists to the ListView so that it can later display the icons:
   LV_SetImageList(imageListID, 1)
@@ -490,7 +467,6 @@ DrawListView(windows)
 
     ; Retrieves an 8-digit hexadecimal number representing extended style of a window.
     WinGet, style, ExStyle, ahk_id %wid%
-
     ; http://msdn.microsoft.com/en-us/library/windows/desktop/ff700543(v=vs.85).aspx
     ; Forces a top-level window onto the taskbar when the window is visible.
     WS_EX_APPWINDOW = 0x40000
@@ -576,12 +552,10 @@ DrawListView(windows)
     windows.Remove(rowNum)
   }
 
-  LV_Modify(1, "Select")
-  LV_Modify(1, "Focus")
+  LV_Modify(1, "Select Focus")
 
-  LV_ModifyCol(1,70)
-  LV_ModifyCol(2,140)
-  LV_ModifyCol(3,640)
+  LV_ModifyCol(1,compact ? 40 : 60)
+  LV_ModifyCol(2,110)
 }
 
 ;----------------------------------------------------------------------
@@ -599,6 +573,36 @@ GetProcessName(wid)
 
   return name
 }
+
+; Wrapper for Strdiff, returns better results, found somewhere on the forum, can't recall where though
+FuzzySearch(string1, string2)
+{
+	lenl := StrLen(string1)
+	lens := StrLen(string2)
+	if(lenl > lens)
+	{
+		shorter := string2
+		longer := string1
+	}
+	else if(lens > lenl)
+	{
+		shorter := string1
+		longer := string2
+		lens := lenl
+		lenl := StrLen(string2)
+	}
+	else
+		return StrDiff(string1, string2)
+	min := 1
+	Loop % lenl - lens + 1
+	{
+		distance := StrDiff(shorter, SubStr(longer, A_Index, lens))
+		if(distance < min)
+			min := distance
+	}
+	return min
+}
+
 
 /*
 https://gist.github.com/grey-code/5286786
@@ -656,4 +660,68 @@ StrDiff(str1, str2, maxOffset:=5) {
   }
 
   return ((n0 + m0)/2 - lcs) / (n0 > m0 ? n0 : m0)
+}
+
+; Allows dragging the window position
+WM_LBUTTONDOWN() {
+    If A_Gui
+        PostMessage, 0xA1, 2 ; 0xA1 = WM_NCLBUTTONDOWN 
+}
+
+; Sizes the client area to fill the entire window.
+WM_NCCALCSIZE()
+{
+  If A_Gui
+    return 0
+}
+
+; Prevents a border from being drawn when the window is activated.
+WM_NCACTIVATE()
+{
+  If A_Gui
+    return 1
+}
+
+; Redefine where the sizing borders are.  This is necessary since
+; returning 0 for WM_NCCALCSIZE effectively gives borders zero size.
+WM_NCHITTEST(wParam, lParam)
+{
+    static border_size = 6
+
+    if !A_Gui
+        return
+
+    WinGetPos, gX, gY, gW, gH
+    gH -= 10, gW -= 10
+    x := lParam<<48>>48, y := lParam<<32>>48
+
+    hit_left := x < gX+border_size
+    hit_right := x >= gX+gW-border_size
+    hit_top := y < gY+border_size
+    hit_bottom := y >= gY+gH-border_size
+
+    if hit_top
+    {
+        if hit_left
+            return 0xD
+        else if hit_right
+            return 0xE
+        else
+            return 0xC
+    }
+    else if hit_bottom
+    {
+        if hit_left
+            return 0x10
+        else if hit_right
+            return 0x11
+        else
+            return 0xF
+    }
+    else if hit_left
+        return 0xA
+    else if hit_right
+        return 0xB
+
+    ; else let default hit-testing be done
 }
