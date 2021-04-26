@@ -4,6 +4,7 @@
 ;
 #SingleInstance force
 #NoTrayIcon
+#Include Chrome.ahk
 
 ; Use small icons in the listview
 Global compact := true
@@ -55,6 +56,8 @@ useMultipleTerms := true
 ;     lastSearch  - previous search string
 ;     switcher_id - the window ID of the switcher window
 ;     debounced   - true when its ok to re-filter
+;     chromeInst  - object for connected Chrome debug protocol session
+;     compact     - true when compact listview is enabled (small icons)
 ;
 ;----------------------------------------------------------------------
 
@@ -62,7 +65,15 @@ useMultipleTerms := true
 ; #Warn  ; Enable warnings to assist with detecting common errors.
 SendMode Input  ; Recommended for new scripts due to its superior speed and reliability.
 SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
+SetBatchLines -1 ; faster execution
 
+; Load saved position from settings.ini
+IniRead, x, settings.ini, position, x
+IniRead, y, settings.ini, position, y
+IniRead, w, settings.ini, position, w
+IniRead, h, settings.ini, position, h
+If (!x || !y || !w || !h || x = "ERROR" || y = "ERROR" || w = "ERROR" || h = "ERROR")
+  x := y := w := h := 0 ; zero out of any values are invalid
 OnMessage(0x201, "WM_LBUTTONDOWN") ; Allows clicking and dragging the window
 
 ;These remove the borders, while allowing the window to be resizable
@@ -83,7 +94,7 @@ Gui, Add, Text,     h30 xm+5 ym+3, % Chr(0xE721)
 Gui, Font, s10 cEEE8D5, Segoe UI
 Gui, Add, Edit,     w420 h25 x+10 ym gSearchChange vsearch -E0x200,
 Gui, Add, ListView, w490 h500 x9 y+4 -VScroll -HScroll -Hdr -Multi Count10 AltSubmit vlist gListViewClick -E0x200, index|title|proc
-Gui, Show, , Window Switcher
+Gui, Show, % x ? "x" x " y" y " w" w " h" h : "" , Window Switcher
 WinHide, ahk_id %switcher_id%
 
 
@@ -96,6 +107,7 @@ for i, e in numkey {
     Hotkey, % "#" e, % KeyFunc
 }
 
+; Define hotstrings for selecting rows, by typing the number with a space after
 Loop 99 {
     KeyFunc := Func("ActivateWindow").Bind(A_Index)
     Hotkey, IfWinActive, % "ahk_id" switcher_id
@@ -143,7 +155,7 @@ End::         ;Jump to bottom
     Case "^Backspace":  ControlSend, Edit1, ^+{left}{Backspace}, ahk_id %switcher_id%
     Case "Home":        LV_Modify(1, "Select Focus Vis")
     Case "End":         LV_Modify(LV_GetCount(), "Select Focus Vis")
-    Case "!F4":         ExitApp
+    Case "!F4":         Quit()
     Case "Tab", "+Tab", "Up", "Down", "PgUp", "PgDn":
       page := InStr(A_ThisHotkey,"Pg")
       row := LV_GetNext()
@@ -164,8 +176,17 @@ GuiSize:
   GuiControl, Move, list, % "w" A_GuiWidth - 20 " h" A_GuiHeight - 50
   GuiControl, Move, search, % "w" A_GuiWidth - 52
   LV_ModifyCol(3,A_GuiWidth - (compact ? 190 : 210)) ; Resizes column 3 to match gui width
-  WinGetPos, , , w, h, ahk_id %switcher_id%
+  WinGetPos, x, y, w, h, ahk_id %switcher_id%
   WinSet, Region , 0-0 w%w% h%h% R15-15, ahk_id %switcher_id%  ;Sets window region to round off corners
+  SetTimer, SaveTimer, -2000
+Return
+
+SaveTimer:
+  WinGetPos, x, y, w, h, ahk_id %switcher_id%
+  IniWrite, %x%, settings.ini, position, x
+  IniWrite, %y%, settings.ini, position, y
+  IniWrite, % w - 14, settings.ini, position, w ; manual adjustment of saved w/h. Gui, Show always 
+  IniWrite, % h - 14, settings.ini, position, h ; makes it 14px larger when specifying coords.
 Return
 
 HideTimer:
@@ -174,6 +195,12 @@ HideTimer:
     SetTimer, HideTimer, Off
   }
 Return
+
+Quit() {
+  global switcher_id
+  Gosub, SaveTimer
+  ExitApp
+}
 
 ;----------------------------------------------------------------------
 ;
@@ -253,7 +280,7 @@ IncludedIn(haystack,needle)
 ;
 GetAllWindows()
 {
-  global switcher_id, filters
+  global switcher_id, filters, ChromeInst, Chromes
   windows := Object()
 
   WinGet, id, list, , , Program Manager
@@ -282,7 +309,18 @@ GetAllWindows()
     procName := GetProcessName(wid)
     windows.Insert({ "id": wid, "title": title, "procName": procName })
   }
-
+  If WinExist("ahk_exe chrome.exe") {
+    Try {
+      If (Chromes := Chrome.FindInstances()) {
+        ChromeInst := {"base": Chrome, "DebugPort": Chromes.MinIndex()}
+        list := ChromeInst.GetPageList()
+        for i, e in list {
+          if (InStr(e.type,"page") && !InStr(e.url,"chrome-extension"))
+            windows.Insert({ "url": e.url, "title": e.title, "procName":"Chrome tab" })
+        }
+      }
+    }
+  }
   return windows
 }
 
@@ -294,7 +332,7 @@ RefreshWindowList()
 {
   global allwindows, windows
   global search, lastSearch, refreshEveryKeystroke
-  if (search ~= "^\d+")
+    if (search ~= "^\d+")
     return
   uninitialized := (allwindows.MinIndex() = "")
 
@@ -436,7 +474,7 @@ return list
 ;
 ActivateWindow(rowNum := "")
 {
-  global windows
+  global windows, ChromeInst
 
   If !rowNum
     rowNum:= LV_GetNext(0)
@@ -444,18 +482,28 @@ ActivateWindow(rowNum := "")
     return
   Gui Submit
   wid := windows[rowNum].id
-
+  procName := windows[rowNum].procName
   ; In some cases, calling WinMinimize minimizes the window, but it retains its
   ; focus preventing WinActivate from raising window.
-  IfWinActive, ahk_id %wid%
-  {
-    WinGet, state, MinMax, ahk_id %wid%
-    if (state = -1)
-    {
-      WinRestore, ahk_id %wid%
+  If (procName = "Chrome tab") {
+    Try {
+      url := windows[rowNum].url
+      page := ChromeInst.GetPageByURL(url,"exact")
+      page.Call("Page.bringToFront")
+      WinActivate, ahk_exe chrome.exe
+      page.Disconnect()
     }
-  } else {
-    WinActivate, ahk_id %wid%
+  } Else {
+    IfWinActive, ahk_id %wid%
+    {
+      WinGet, state, MinMax, ahk_id %wid%
+      if (state = -1)
+      {
+        WinRestore, ahk_id %wid%
+      }
+    } else {
+      WinActivate, ahk_id %wid%
+    }
   }
 
   LV_Delete()
@@ -468,6 +516,7 @@ ActivateWindow(rowNum := "")
 DrawListView(windows)
 {
   Critical
+  Global Chromes
   windowCount := windows.MaxIndex()
   imageListID := IL_Create(windowCount, 1, compact ? 0 : 1)
 
@@ -482,6 +531,7 @@ DrawListView(windows)
   {
     wid := window.id
     title := window.title
+    procName := window.procName
 
     ; Retrieves an 8-digit hexadecimal number representing extended style of a window.
     WinGet, style, ExStyle, ahk_id %wid%
@@ -501,8 +551,10 @@ DrawListView(windows)
 
     iconNumber =
 
-    if (isAppWindow or ( !ownerHwnd and !isToolWindow ))
+    if (procName = "Chrome tab" or isAppWindow or ( !ownerHwnd and !isToolWindow ))
     {
+      if (procName = "Chrome tab") ; Apply the Chrome icon to found Chrome tabs
+        wid := WinExist("ahk_exe chrome.exe")
       ; http://www.autohotkey.com/docs/misc/SendMessageList.htm
       WM_GETICON := 0x7F
 
@@ -554,12 +606,11 @@ DrawListView(windows)
         iconNumber := IL_Add(imageListID, "C:\WINDOWS\system32\shell32.dll", 217) ; generic control panel icon
     }
 
-    if iconNumber > 0
-    {
+    if (iconNumber < 1 || (procName == "chrome" && IsObject(Chromes))) { ; Don't list the Chrome window if connected to debug session
+      removedRows.Insert(idx)
+    } else {
       iconCount+=1
       LV_Add("Icon" . iconNumber, iconCount, window.procName, title)
-    } else {
-      removedRows.Insert(idx)
     }
   }
 
