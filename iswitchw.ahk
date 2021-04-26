@@ -96,6 +96,12 @@ for i, e in numkey {
     Hotkey, % "#" e, % KeyFunc
 }
 
+Loop 99 {
+    KeyFunc := Func("ActivateWindow").Bind(A_Index)
+    Hotkey, IfWinActive, % "ahk_id" switcher_id
+    Hotstring(":X:" A_Index , KeyFunc)
+}
+
 Return
 
 ;----------------------------------------------------------------------
@@ -114,6 +120,7 @@ WinGetPos, , , w, h, ahk_id %switcher_id%
 WinSet, Region , 0-0 w%w% h%h% R15-15, ahk_id %switcher_id%
 WinActivate, ahk_id %switcher_id%
 ControlFocus, Edit1, ahk_id %switcher_id%
+SetTimer, HideTimer, 10
 Return
 
 #If WinActive("ahk_id" switcher_id)
@@ -159,6 +166,13 @@ GuiSize:
   LV_ModifyCol(3,A_GuiWidth - (compact ? 190 : 210)) ; Resizes column 3 to match gui width
   WinGetPos, , , w, h, ahk_id %switcher_id%
   WinSet, Region , 0-0 w%w% h%h% R15-15, ahk_id %switcher_id%  ;Sets window region to round off corners
+Return
+
+HideTimer:
+  If !WinActive("ahk_id" switcher_id) {
+    WinHide, ahk_id %switcher_id%
+    SetTimer, HideTimer, Off
+  }
 Return
 
 ;----------------------------------------------------------------------
@@ -280,6 +294,8 @@ RefreshWindowList()
 {
   global allwindows, windows
   global search, lastSearch, refreshEveryKeystroke
+  if (search ~= "^\d+")
+    return
   uninitialized := (allwindows.MinIndex() = "")
 
   if (uninitialized || refreshEveryKeystroke)
@@ -422,9 +438,11 @@ ActivateWindow(rowNum := "")
 {
   global windows
 
-  Gui Submit
   If !rowNum
     rowNum:= LV_GetNext(0)
+  If (rowNum > LV_GetCount())
+    return
+  Gui Submit
   wid := windows[rowNum].id
 
   ; In some cases, calling WinMinimize minimizes the window, but it retains its
