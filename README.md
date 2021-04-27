@@ -54,7 +54,7 @@ package for the Emacs editor.
 2004/10/10, CREATED by keyboardfreak         [[link][hist1]]  
 2008/07/03, MODIFIED by ezuk                 [[link][hist2]]  
 2011/06/11, MODIFIED by jixiuf               [[link][hist3]]  
-2013/08/23, MODIFIED by dirtyrottenscoundrel [[link][hist4]]
+2013/08/23, MODIFIED by dirtyrottenscoundrel [[link][hist4]]  
 2014/05/30, MODIFIED by tvjg                 [[link][hist5]]
 
 My thanks to the previous contributors to this script. Without your work to
