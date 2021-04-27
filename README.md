@@ -12,37 +12,37 @@ Built and tested using AutoHotkeyL v1.1.11.01 on Windows 7 (x64).
 
 iswitchw strives to be as intuitive as possible.
 
-* `Win + Space` activates iswitchw  
-* `Esc` cancels at any time  
-* `Tab` to advance the selected window match  
-* `Up/Down` arrow keys move through the matches  
-* `Left/Right` arrow keys move the insert cursor in the search box  
-* `Home/End` move the insert cursor or match selection depending on context  
-* `Ctrl + Delete/Backspace` removes a word from the search  
-* `Ctrl + Left/Right` arrow keys skip forward/backward by the word  
-* Click a title to activate a window with the mouse  
-* Any other typing should be passed through to the search  
+* `Capslock` activates iswitchw
+* `Esc` cancels at any time
+* `Tab/Shift + Tab` `Down/Up` `Ctrl + J/K` navigate next/previous row
+* `Left/Right` arrow keys move the insert cursor in the search box
+* `Home/End` jump to the top/bottom of list
+* `PgDn/PgUp` jumps down/up the list 4 rows at a time
+* `Ctrl + Delete/Backspace/W` removes a word from the search, or,
+* if there's no further matches or only a single match: clear the input
+* `Ctrl + Left/Right` arrow keys skip forward/backward by the word
+* Click a title to activate a window with the mouse
+* Any other typing should be passed through to the search
 
 By default, iswitchw is restricted to a single instance and hides itself from
 the tray. Run the script again at any time to replace the running instance. If
-you want to quit the script entirely, activate iswitchw with `Win + Space` and
+you want to quit the script entirely, activate iswitchw with `Capslock` and
 then press `Alt + F4`.
 
 If you want iswitchw to run when Windows starts, make a shortcut to the
 iswitchw.ahk file in the folder `%APPDATA%\Microsoft\Windows\Start
 Menu\Programs\Startup`. See [here][start-on-boot] also.
 
+Selection of open Chrome tabs is possible when Chrome is run with the
+remote-debugging-port flag is enabled via the [Chrome.ahk][chrome.ahk] library.
+Details on how to start Chrome with debugging enabled is covered [here][debug].
+
 ### Options
 
 User configurable options are presented at the top of the ahk script.
 
-### Example
-
-![iswitchw in action](./using-iswitchw.gif?raw=true)
-
 ### Todo
 
-* [ ] Tweak scoring algorithm to work better with long window titles
 * [ ] Add better explanations/examples for configuration options
 * [ ] Move hotkey binding and options into ini file
 
@@ -54,7 +54,8 @@ package for the Emacs editor.
 2004/10/10, CREATED by keyboardfreak         [[link][hist1]]  
 2008/07/03, MODIFIED by ezuk                 [[link][hist2]]  
 2011/06/11, MODIFIED by jixiuf               [[link][hist3]]  
-2013/08/23, MODIFIED by dirtyrottenscoundrel [[link][hist4]]  
+2013/08/23, MODIFIED by dirtyrottenscoundrel [[link][hist4]]
+2014/05/30, MODIFIED by tvjg                 [[link][hist5]]
 
 My thanks to the previous contributors to this script. Without your work to
 lean on and learn from, I would have never started. My primary goals were to
@@ -77,3 +78,6 @@ readable to the majority of programmers.
 [hist2]: http://www.autohotkey.com/forum/viewtopic.php?t=33353
 [hist3]: https://github.com/jixiuf/my_autohotkey_scripts/blob/master/ahk_scripts/iswitchw-plus.ahk
 [hist4]: https://github.com/dirtyrottenscoundrel/iswitchw
+[hist5]: https://github.com/tvjg/iswitchw
+[chrome.ahk]: https://github.com/G33kDude/Chrome.ahk
+[debug]: https://stackoverflow.com/questions/51563287/how-to-make-chrome-always-launch-with-remote-debugging-port-flag
