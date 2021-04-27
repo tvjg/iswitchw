@@ -6,7 +6,9 @@ popup. Start typing to narrow possible matches -- hit enter at any point to
 activate the top match. Matches are narrowed using an approximate/'fuzzy'
 filtering method similar to tools like [Ido][ido] and [CtrlP][ctrlp].
 
-Built and tested using AutoHotkeyL v1.1.11.01 on Windows 7 (x64).
+Built and tested using AutoHotkeyL v1.1.33.02 on Windows 10 (x64).
+
+![screenshot](https://user-images.githubusercontent.com/24360832/116187876-3f996c00-a6db-11eb-888a-b2f2303d201d.png)
 
 ### Usage
 
