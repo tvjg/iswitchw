@@ -9,6 +9,18 @@
 ; Use small icons in the listview
 Global compact := true
 
+; A bit of a hack, but this 'hides' the scorlls bars, rather the listview is
+; sized out of bounds, you'll still be able to use the scroll wheel or arrows
+; but when resizing the window you can't use the left edge of the window, just
+; the top and bottom right.
+Global hideScrollBars := true
+
+; Activate the window if it's the only match
+activateOnlyMatch := false
+
+; Hides the UI when focus is lost!
+hideWhenFocusLost := true
+
 ; Window titles containing any of the listed substrings are filtered out fromin
 ; useful for things like  hiding improperly configured tool windows or screen
 ; capture software during demos.
@@ -18,10 +30,6 @@ filters := []
 ; updated. This is usually not necessary and creates additional overhead, so
 ; it is disabled by default. 
 refreshEveryKeystroke := false
-
-; Only re-filter the possible window matches this often (in ms) at maximum.
-; When typing is rapid, no sense in running the search on every keypress.
-debounceDuration := 250
 
 ; When true, filtered matches are scored and the best matches are presented
 ; first. This helps account for simple spelling mistakes such as transposed
@@ -55,7 +63,6 @@ useMultipleTerms := true
 ;     search      - the current search string
 ;     lastSearch  - previous search string
 ;     switcher_id - the window ID of the switcher window
-;     debounced   - true when its ok to re-filter
 ;     chromeInst  - object for connected Chrome debug protocol session
 ;     compact     - true when compact listview is enabled (small icons)
 ;
@@ -66,6 +73,7 @@ useMultipleTerms := true
 SendMode Input  ; Recommended for new scripts due to its superior speed and reliability.
 SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
 SetBatchLines -1 ; faster execution
+global switcher_id
 
 ; Load saved position from settings.ini
 IniRead, x, settings.ini, position, x
@@ -90,10 +98,10 @@ Gui, Color, black, 191919
 WinSet, Transparent, 225
 Gui, Margin, 8, 10
 Gui, Font, s14 cEEE8D5, Segoe MDL2 Assets
-Gui, Add, Text,     h30 xm+5 ym+3, % Chr(0xE721)
+Gui, Add, Text,     xm+5 ym+3, % Chr(0xE721)
 Gui, Font, s10 cEEE8D5, Segoe UI
 Gui, Add, Edit,     w420 h25 x+10 ym gSearchChange vsearch -E0x200,
-Gui, Add, ListView, w490 h500 x9 y+4 -VScroll -HScroll -Hdr -Multi Count10 AltSubmit vlist gListViewClick -E0x200, index|title|proc
+Gui, Add, ListView, % (hideScrollbars ? "x0" : "x9") " y+4 w490 h500  -VScroll -HScroll -Hdr -Multi Count10 AltSubmit vlist gListViewClick +LV0x10000 -E0x200", index|title|proc
 Gui, Show, % x ? "x" x " y" y " w" w " h" h : "" , Window Switcher
 WinHide, ahk_id %switcher_id%
 
@@ -121,18 +129,21 @@ Return
 ; Win+space to activate.
 ;
 #space::
+; CapsLock:: ; Use Shift+Capslock to toggle while in use by the hotkey
+If WinActive("ahk_class Windows.UI.Core.CoreWindow") ; clear the search/start menu if it's open, otherwise it keeps stealing focus
+  Send, {esc}
 search =
 lastSearch =
-debounced := true
 allwindows := Object()
 GuiControl, , Edit1
 WinShow, ahk_id %switcher_id%
-WinSet, AlwaysOnTop, On, ahk_id %switcher_id%
+WinActivate, ahk_id %switcher_id%
 WinGetPos, , , w, h, ahk_id %switcher_id%
 WinSet, Region , 0-0 w%w% h%h% R15-15, ahk_id %switcher_id%
-WinActivate, ahk_id %switcher_id%
+WinSet, AlwaysOnTop, On, ahk_id %switcher_id%
 ControlFocus, Edit1, ahk_id %switcher_id%
-SetTimer, HideTimer, 10
+If hideWhenFocusLost
+  SetTimer, HideTimer, 10
 Return
 
 #If WinActive("ahk_id" switcher_id)
@@ -141,6 +152,10 @@ Escape::      ;Close window
 ^Backspace::  ;Clear text
 Down::        ;Next row
 Tab::         
+^h::
+^k::
+^j::
+^w::
 Up::          ;Previous row
 +Tab::        
 PgUp::        ;Jump up 4 rows
@@ -148,47 +163,58 @@ PgDn::        ;Jump down 4 rows
 Home::        ;Jump to top
 End::         ;Jump to bottom
 !F4::         ;Quit
+~Delete::
+~Backspace::
   SetKeyDelay, -1
   Switch A_ThisHotkey {
     Case "Enter":       ActivateWindow()
     Case "Escape":      WinHide, ahk_id %switcher_id%
-    Case "^Backspace":  ControlSend, Edit1, ^+{left}{Backspace}, ahk_id %switcher_id%
     Case "Home":        LV_Modify(1, "Select Focus Vis")
     Case "End":         LV_Modify(LV_GetCount(), "Select Focus Vis")
     Case "!F4":         Quit()
-    Case "Tab", "+Tab", "Up", "Down", "PgUp", "PgDn":
+    Case "^h":          ControlSend, Edit1, {Backspace}, ahk_id %switcher_id%
+    Case "~Delete", "~Backspace", "^Backspace", "^w":
+      If ( (windows.MaxIndex() < 1 && LV_GetCount() > 1) || LV_GetCount() = 1)
+        GuiControl, , Edit1,
+      Else If (A_ThisHotkey = "^Backspace" || A_ThisHotkey = "^w")
+        ControlSend, Edit1, ^+{left}{Backspace}, ahk_id %switcher_id%
+    Case "Tab", "+Tab", "Up", "Down", "PgUp", "PgDn", "^k", "^j":
       page := InStr(A_ThisHotkey,"Pg")
       row := LV_GetNext()
       jump := page ? 4 : 1
       If (row = 0)
         row := 1
-      row := GetKeyState("Shift") || InStr(A_ThisHotkey,"Up") ? row - jump : row + jump
+      row := GetKeyState("Shift") || InStr(A_ThisHotkey,"Up") || InStr(A_ThisHotkey,"^k") ? row - jump : row + jump
       If (row > LV_GetCount())
         row := page ? LV_GetCount() : 1
       Else If (row < 1)
-        row := page ? 1 : LV_GetCount()  
+        row := page ? 1 : LV_GetCount()
       LV_Modify(row, "Select Focus Vis")
   }
 Return
 
 ; Resizes the search field and list to the GUI width
 GuiSize:
-  GuiControl, Move, list, % "w" A_GuiWidth - 20 " h" A_GuiHeight - 50
+  GuiControl, Move, list, % "w" (hideScrollBars ? A_GuiWidth + 20 : A_GuiWidth - 20) " h" A_GuiHeight - 50
   GuiControl, Move, search, % "w" A_GuiWidth - 52
-  LV_ModifyCol(3,A_GuiWidth - (compact ? 190 : 210)) ; Resizes column 3 to match gui width
-  WinGetPos, x, y, w, h, ahk_id %switcher_id%
-  WinSet, Region , 0-0 w%w% h%h% R15-15, ahk_id %switcher_id%  ;Sets window region to round off corners
+  LV_ModifyCol(3
+  , A_GuiWidth - ( hideScrollBars
+  ? (compact ? 160 : 180)   ; Resizes column 3 to match gui width
+  : (compact ? 190 : 210)))
+  WinGetPos, x, y, w, h, % "ahk_id" switcher_id
+  WinSet, Region , 0-0 w%w% h%h% R15-15, % "ahk_id" switcher_id  ;Sets window region to round off corners
   SetTimer, SaveTimer, -2000
 Return
 
 SaveTimer:
-  WinGetPos, x, y, w, h, ahk_id %switcher_id%
-  IniWrite, %x%, settings.ini, position, x
-  IniWrite, %y%, settings.ini, position, y
+  WinGetPos, x, y, w, h, % "ahk_id" switcher_id
+  IniWrite, % x, settings.ini, position, x
+  IniWrite, % y, settings.ini, position, y
   IniWrite, % w - 14, settings.ini, position, w ; manual adjustment of saved w/h. Gui, Show always 
   IniWrite, % h - 14, settings.ini, position, h ; makes it 14px larger when specifying coords.
 Return
 
+; Hides the UI if it loses focus
 HideTimer:
   If !WinActive("ahk_id" switcher_id) {
     WinHide, ahk_id %switcher_id%
@@ -202,29 +228,25 @@ Quit() {
   ExitApp
 }
 
+
 ;----------------------------------------------------------------------
 ;
 ; Runs whenever Edit control is updated
 SearchChange:
-  global debounced, debounceDuration
-  if (!debounced) {
-    return
+  if (LV_GetCount() = 1) {
+    Gui, Font, c90ee90fj
+    GuiControl, Font, Edit1
   }
-  debounced := false
-  SetTimer, Debounce, -%debounceDuration%
-
   Gui, Submit, NoHide
   RefreshWindowList()
-  return
-
-;----------------------------------------------------------------------
-;
-; Clear debounce check
-Debounce:
-  global debounced := true
-
-  Gui, Submit, NoHide
-  RefreshWindowList()
+  If (LV_GetCount() > 1) {
+    Gui, Font, % LV_GetCount() > 1 && windows.MaxIndex() < 1 ? "cff2626" : "cEEE8D5"
+    GuiControl, Font, Edit1
+  } Else if (LV_GetCount() = 1) {
+    Gui, Font, c90ee90fj
+    GuiControl, Font, Edit1
+  }
+  OutputDebug, % "lvcount: " LV_GetCount() " - windows: " windows.MaxIndex() "`n"
   return
 
 ;----------------------------------------------------------------------
@@ -236,23 +258,6 @@ ListViewClick:
     ActivateWindow()
   }
   return
-
-;----------------------------------------------------------------------
-;
-; Checks if user is holding Ctrl and/or Shift, then adds the
-; appropriate modifiers to the key parameter before returning the
-; result.
-;
-AddModifierKeys(key)
-{
-  if GetKeyState("Ctrl","P")
-    key := "^" . key
-
-  if GetKeyState("Shift","P")
-    key := "+" . key
-
-  return key
-}
 
 ;----------------------------------------------------------------------
 ;
@@ -407,7 +412,7 @@ FilterWindowList(list, criteria)
 
     filteredList.Insert(window)
   }
-
+  
   return (doScore ? SortByScore(filteredList) : filteredList)
 }
 
@@ -515,15 +520,15 @@ ActivateWindow(rowNum := "")
 ;
 DrawListView(windows)
 {
-  Critical
-  Global Chromes
+  Global Chromes, switcher_id
   windowCount := windows.MaxIndex()
+  If !windowCount
+    return
   imageListID := IL_Create(windowCount, 1, compact ? 0 : 1)
 
   ; Attach the ImageLists to the ListView so that it can later display the icons:
   LV_SetImageList(imageListID, 1)
   LV_Delete()
-
   iconCount = 0
   removedRows := Array()
 
@@ -625,6 +630,8 @@ DrawListView(windows)
 
   LV_ModifyCol(1,compact ? 40 : 60)
   LV_ModifyCol(2,110)
+  If (windows.Count() = 1 && activateOnlyMatch)
+    ActivateWindow(1)
 }
 
 ;----------------------------------------------------------------------
