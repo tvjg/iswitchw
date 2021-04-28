@@ -21,10 +21,16 @@ activateOnlyMatch := false
 ; Hides the UI when focus is lost!
 hideWhenFocusLost := true
 
-; Window titles containing any of the listed substrings are filtered out fromin
+; Window titles containing any of the listed substrings are filtered out from results
 ; useful for things like  hiding improperly configured tool windows or screen
 ; capture software during demos.
 filters := []
+
+; Add folders containing files or shortcuts you'd like to show in the list.
+; Enter new paths as an array
+; todo: show file extensions/path in the list, etc.
+shortcutFolders := ["C:\Users\" A_UserName "\Desktop"
+,"C:\Users\" A_UserName "\Documents"]
 
 ; Set this to true to update the list of windows every time the search is
 ; updated. This is usually not necessary and creates additional overhead, so
@@ -89,6 +95,13 @@ OnMessage(0x84, "WM_NCHITTEST")
 OnMessage(0x83, "WM_NCCALCSIZE")
 OnMessage(0x86, "WM_NCACTIVATE")
 
+fileList := []
+if IsObject(shortcutFolders) {
+  for i, e in shortcutFolders
+    Loop, Files, % e "\*"
+      fileList.Push({"fileName":RegExReplace(A_LoopFileName,"\.\w{3}$"),"path":A_LoopFileFullPath})
+}
+
 AutoTrim, off
 
 Gui, +LastFound +AlwaysOnTop -Caption +ToolWindow +Resize -DPIScale +MinSize220x127 +Hwndswitcher_id
@@ -144,6 +157,16 @@ If hideWhenFocusLost
   SetTimer, HideTimer, 10
 Return
 
+#/::
+toggleMethod := !toggleMethod
+ToolTip, % "Filter mode: " (toggleMethod ? "Old" : "New")
+SetTimer, tooltipOff, -2000
+Return
+
+tooltipOff:
+  ToolTip
+Return
+
 #If WinActive("ahk_id" switcher_id)
 Enter::       ;Activate window
 Escape::      ;Close window
@@ -158,8 +181,8 @@ Up::          ;Previous row
 ^j::          ; ''
 PgUp::        ;Jump up 4 rows
 PgDn::        ;Jump down 4 rows
-Home::        ;Jump to top
-End::         ;Jump to bottom
+^Home::        ;Jump to top
+^End::         ;Jump to bottom
 !F4::         ;Quit
 ~Delete::
 ~Backspace::
@@ -167,8 +190,8 @@ End::         ;Jump to bottom
   Switch A_ThisHotkey {
     Case "Enter":       ActivateWindow()
     Case "Escape":      WinHide, ahk_id %switcher_id%
-    Case "Home":        LV_Modify(1, "Select Focus Vis")
-    Case "End":         LV_Modify(LV_GetCount(), "Select Focus Vis")
+    Case "^Home":        LV_Modify(1, "Select Focus Vis")
+    Case "^End":         LV_Modify(LV_GetCount(), "Select Focus Vis")
     Case "!F4":         Quit()
     Case "^h":          ControlSend, Edit1, {Backspace}, ahk_id %switcher_id%
     Case "~Delete", "~Backspace", "^Backspace", "^w":
@@ -236,7 +259,12 @@ SearchChange:
     GuiControl, Font, Edit1
   }
   Gui, Submit, NoHide
-  RefreshWindowList()
+  StartTime := A_TickCount
+  If toggleMethod
+    RefreshWindowListOld()
+  Else
+    RefreshWindowList()
+  ElapsedTime := A_TickCount - StartTime
   If (LV_GetCount() > 1) {
     Gui, Font, % LV_GetCount() > 1 && windows.MaxIndex() < 1 ? "cff2626" : "cEEE8D5"
     GuiControl, Font, Edit1
@@ -244,7 +272,14 @@ SearchChange:
     Gui, Font, c90ee90fj
     GuiControl, Font, Edit1
   }
-  OutputDebug, % "lvcount: " LV_GetCount() " - windows: " windows.MaxIndex() "`n"
+  For i, e in windows {
+    str .= Format("{:-4} {:-15} {:-55}Score: {}`n",A_Index ":",SubStr(e.procName,1,14),StrLen(e.title) > 50 ? SubStr(e.title,1,50) "..." : e.title,e.score)
+  }
+  OutputDebug, % "lvcount: " LV_GetCount() " - windows: " windows.MaxIndex()
+  . "`n------------------------------------------------------------------------------------------------" 
+  . Format("`nNew filter: {} | Result count: {:-4} | Time: {:-4} | Search string: {} ",toggleMethod ? "On " : "Off",LV_GetCount(),ElapsedTime,search)
+  . "`n------------------------------------------------------------------------------------------------`n" . str
+  str := ""
   return
 
 ;----------------------------------------------------------------------
@@ -290,6 +325,8 @@ GetAllWindows()
   Loop {
   	next :=	DllCall("GetWindow", "Ptr", (A_Index = 1 ? top : next),"uint",2)
   	WinGetTitle, title, % "ahk_id" next
+    if IncludedIn(filters, title) > -1
+      continue
   	if title {
       procName := GetProcessName(next)
       if (procName = "chrome") {
@@ -314,11 +351,100 @@ GetAllWindows()
   return windows
 }
 
+RefreshWindowList() {
+  global allwindows, windows, scoreMatches, fileList
+  global search, lastSearch, refreshEveryKeystroke
+  if (search ~= "^\d+")
+    return  
+  windows := []
+  toRemove := ""
+  If (!search || refreshEveryKeystroke) {
+    allwindows := GetAllWindows()
+    for _, e in fileList {
+      allwindows.Push({"procname":"Shortcut","title":e.fileName,"path":e.path})
+    }  
+  }
+  regex := BuildFilterExpression(search)
+  For i, e in allwindows {
+      str := e.procname . " " . e.title
+      If (str ~= regex) {
+        If scoreMatches
+          e.score := FuzzySearch(search, str)
+        windows.Push(e)
+      } Else If search {
+        toRemove .= i ","
+      }
+  }
+  If scoreMatches
+    windows := objectSort(windows, "score")
+  for i, e in StrSplit(toRemove,",")
+    allwindows.Delete(e)
+  OutputDebug, % "Allwindows count: " allwindows.MaxIndex() " | windows count: " windows.MaxIndex() "`n"
+  DrawListView(windows)
+}
+
+/* ObjectSort() by bichlepa
+* 
+* Description:
+*    Reads content of an object and returns a sorted array
+* 
+* Parameters:
+*    obj:              Object which will be sorted
+*    keyName:          [optional] 
+*                      Omit it if you want to sort a array of strings, numbers etc.
+*                      If you have an array of objects, specify here the key by which contents the object will be sorted.
+*    callBackFunction: [optional] Use it if you want to have custom sort rules.
+*                      The function will be called once for each value. It must return a number or string.
+*    reverse:          [optional] Pass true if the result array should be reversed
+*/
+
+objectSort(obj, keyName="", callbackFunc="", reverse=false)
+{
+    temp := Object()
+    sorted := Object() ;Return value
+
+    for oneKey, oneValue in obj
+    {
+        ;Get the value by which it will be sorted
+        if keyname
+            value := oneValue[keyName]
+        else
+            value := oneValue
+
+        ;If there is a callback function, call it. The value is the key of the temporary list.
+        if (callbackFunc)
+            tempKey := %callbackFunc%(value)
+        else
+            tempKey := value
+
+        ;Insert the value in the temporary object.
+        ;It may happen that some values are equal therefore we put the values in an array.
+        if not isObject(temp[tempKey])
+            temp[tempKey] := []
+        temp[tempKey].push(oneValue)
+    }
+
+    ;Now loop throuth the temporary list. AutoHotkey sorts them for us.
+    for oneTempKey, oneValueList in temp
+    {
+        for oneValueIndex, oneValue in oneValueList
+        {
+            ;And add the values to the result list
+            if (reverse)
+                sorted.insertAt(1,oneValue)
+            else
+                sorted.push(oneValue)
+        }
+    }
+
+    return sorted
+}
+
 ;----------------------------------------------------------------------
 ;
 ; Refresh the list of windows according to the search criteria
 ;
-RefreshWindowList()
+RefreshWindowListOld()
 {
   global allwindows, windows
   global search, lastSearch, refreshEveryKeystroke
@@ -400,7 +526,6 @@ FilterWindowList(list, criteria)
   
   return (doScore ? SortByScore(filteredList) : filteredList)
 }
-
 ;----------------------------------------------------------------------
 ;
 ; http://stackoverflow.com/questions/2891514/algorithms-for-fuzzy-matching-strings
@@ -423,14 +548,11 @@ FilterWindowList(list, criteria)
 ;  The list of keywords returned should be presented in a consistent (reproductible) order
 ;  The algorithm should be case insensitive
 ;
-BuildFilterExpression(term)
-{
-  expr := "i)"
-  Loop, parse, term
-  {
-    expr .= "[^" . A_LoopField . "]*" . A_LoopField
-  }
 
+BuildFilterExpression(term) {
+  expr := "i)"
+  for _, character in StrSplit(term)
+    expr .= "[^" . character . "]*" . character
   return expr
 }
 
@@ -473,25 +595,32 @@ ActivateWindow(rowNum := "")
   LV_GetText(title, rowNum, 3)
   LV_GetText(tab, rowNum, 4)
   Gui Submit
-  wid := windows[rowNum].id
-  procName := windows[rowNum].procName
-  url := windows[rowNum].url
-  num := windows[rowNum].num
+  window := windows[rowNum]
+  wid := window.id
+  procName := window.procName
+  url := window.url
+  num := window.num
+  path := window.path
   ; In some cases, calling WinMinimize minimizes the window, but it retains its
   ; focus preventing WinActivate from raising window.
-  If (procName = "Chrome tab")
-    JEE_ChromeFocusTabByNum(wid,num)
-  Else If (procName = "Firefox tab")
-    JEE_FirefoxFocusTabByNum(wid,num)
-  IfWinActive, ahk_id %wid%
-  {
-    WinGet, state, MinMax, ahk_id %wid%
-    if (state = -1)
+  If window.HasKey("path") {
+    ; SplitPath, path, , OutDir
+    Run, % """" path """" ;, % OutDir
+  } Else {
+    If (procName = "Chrome tab")
+      JEE_ChromeFocusTabByNum(wid,num)
+    Else If (procName = "Firefox tab")
+      JEE_FirefoxFocusTabByNum(wid,num)
+    IfWinActive, ahk_id %wid%
     {
-      WinRestore, ahk_id %wid%
+      WinGet, state, MinMax, ahk_id %wid%
+      if (state = -1)
+      {
+        WinRestore, ahk_id %wid%
+      }
+    } else {
+      WinActivate, ahk_id %wid%
     }
-  } else {
-    WinActivate, ahk_id %wid%
   }
   LV_Delete()
 }
@@ -502,7 +631,10 @@ ActivateWindow(rowNum := "")
 ;
 DrawListView(windows)
 {
-  Global Chromes, switcher_id
+  Global switcher_id, fileList
+  static IconArray
+  If !IsObject(IconArray)
+    IconArray := {}
   windowCount := windows.MaxIndex()
   If !windowCount
     return
@@ -513,7 +645,6 @@ DrawListView(windows)
   LV_Delete()
   iconCount = 0
   removedRows := Array()
-
   For idx, window in windows
   {
     wid := window.id
@@ -536,11 +667,32 @@ DrawListView(windows)
     ; An application can use the GetWindow function with the GW_OWNER flag to retrieve a handle to a window's owner.
     GW_OWNER = 4
     ownerHwnd := DllCall("GetWindow", "uint", wid, "uint", GW_OWNER)
-
-    iconNumber =
-
-    if (procName = "Chrome tab" or procName = "Firefox tab" or isAppWindow or ( !ownerHwnd and !isToolWindow ))
-    {
+    iconNumber := ""
+    if window.HasKey("path") {
+      FileName := window.path
+      ; Calculate buffer size required for SHFILEINFO structure.
+      sfi_size := A_PtrSize + 8 + (A_IsUnicode ? 680 : 340)
+      VarSetCapacity(sfi, sfi_size)
+      SplitPath, FileName,,, FileExt  ; Get the file's extension.
+      for i, e in fileList {
+        if (e.path = window.path) {
+          fileObj := fileList[i]
+          iconHandle := fileObj.icon
+          Break
+        }
+      }
+      If !iconHandle {
+        if !DllCall("Shell32\SHGetFileInfo" . (A_IsUnicode ? "W":"A"), "Str", FileName
+        , "UInt", 0, "Ptr", &sfi, "UInt", sfi_size, "UInt", 0x101) { ; 0x101 is SHGFI_ICON+SHGFI_SMALLICON
+          IconNumber := 9999999  ; Set it out of bounds to display a blank icon.
+        } else {
+          iconHandle := NumGet(sfi, 0)
+          fileObj.icon := iconHandle
+        }
+      }
+      if (iconHandle <> 0)
+        iconNumber := DllCall("ImageList_ReplaceIcon", UInt, imageListID, Int, -1, UInt, iconHandle) + 1
+    } else if (procName ~= "Chrome tab|Firefox tab" || isAppWindow || ( !ownerHwnd and !isToolWindow )) {
       if (procName = "Chrome tab") ; Apply the Chrome icon to found Chrome tabs
         wid := WinExist("ahk_exe chrome.exe")
       else if (procName = "Firefox tab")
@@ -587,8 +739,9 @@ DrawListView(windows)
         }
       }
 
-      if (iconHandle <> 0)
+      if (iconHandle <> 0) {
         iconNumber := DllCall("ImageList_ReplaceIcon", UInt, imageListID, Int, -1, UInt, iconHandle) + 1
+      }
 
     } else {
       WinGetClass, Win_Class, ahk_id %wid%
