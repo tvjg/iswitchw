@@ -21,10 +21,15 @@ iswitchw strives to be as intuitive as possible.
 * `Home/End` jump to the top/bottom of list
 * `PgDn/PgUp` jumps down/up the list 4 rows at a time
 * `Ctrl + Delete/Backspace/W` removes a word from the search, or,
-* if there's no further matches or only a single match: clear the input
+  if there's no further matches or only a single match: clear the input
 * `Ctrl + Left/Right` arrow keys skip forward/backward by the word
+* `Win + 0-9` focuses the corresponding tab
+* `1-99` hotstrings to focus any tab, enter the row number followed by
+  a space.
 * Click a title to activate a window with the mouse
 * Any other typing should be passed through to the search
+
+Chrome and Firefox tabs will appear separately in the list.
 
 By default, iswitchw is restricted to a single instance and hides itself from
 the tray. Run the script again at any time to replace the running instance. If
@@ -34,10 +39,6 @@ then press `Alt + F4`.
 If you want iswitchw to run when Windows starts, make a shortcut to the
 iswitchw.ahk file in the folder `%APPDATA%\Microsoft\Windows\Start
 Menu\Programs\Startup`. See [here][start-on-boot] also.
-
-Selection of open Chrome tabs is possible when Chrome is run with the
-remote-debugging-port flag is enabled via the [Chrome.ahk][chrome.ahk] library.
-Details on how to start Chrome with debugging enabled is covered [here][debug].
 
 ### Options
 
