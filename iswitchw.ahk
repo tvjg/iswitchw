@@ -4,7 +4,7 @@
 ;
 #SingleInstance force
 #NoTrayIcon
-#Include Chrome.ahk
+#Include Accv2.ahk
 
 ; Use small icons in the listview
 Global compact := true
@@ -63,7 +63,6 @@ useMultipleTerms := true
 ;     search      - the current search string
 ;     lastSearch  - previous search string
 ;     switcher_id - the window ID of the switcher window
-;     chromeInst  - object for connected Chrome debug protocol session
 ;     compact     - true when compact listview is enabled (small icons)
 ;
 ;----------------------------------------------------------------------
@@ -82,8 +81,8 @@ IniRead, w, settings.ini, position, w
 IniRead, h, settings.ini, position, h
 If (!x || !y || !w || !h || x = "ERROR" || y = "ERROR" || w = "ERROR" || h = "ERROR")
   x := y := w := h := 0 ; zero out of any values are invalid
-OnMessage(0x201, "WM_LBUTTONDOWN") ; Allows clicking and dragging the window
 
+OnMessage(0x201, "WM_LBUTTONDOWN") ; Allows clicking and dragging the window
 ;These remove the borders, while allowing the window to be resizable
 ;https://autohotkey.com/board/topic/23969-resizable-window-border/#entry155480
 OnMessage(0x84, "WM_NCHITTEST")
@@ -92,17 +91,17 @@ OnMessage(0x86, "WM_NCACTIVATE")
 
 AutoTrim, off
 
-Gui, +LastFound +AlwaysOnTop -Caption +ToolWindow +Resize +Hwndswitcher_id
+Gui, +LastFound +AlwaysOnTop -Caption +ToolWindow +Resize -DPIScale +MinSize220x127 +Hwndswitcher_id
 Gui, Color, black, 191919
-; 2e2d2d, 262525
 WinSet, Transparent, 225
 Gui, Margin, 8, 10
 Gui, Font, s14 cEEE8D5, Segoe MDL2 Assets
 Gui, Add, Text,     xm+5 ym+3, % Chr(0xE721)
 Gui, Font, s10 cEEE8D5, Segoe UI
 Gui, Add, Edit,     w420 h25 x+10 ym gSearchChange vsearch -E0x200,
-Gui, Add, ListView, % (hideScrollbars ? "x0" : "x9") " y+4 w490 h500  -VScroll -HScroll -Hdr -Multi Count10 AltSubmit vlist gListViewClick +LV0x10000 -E0x200", index|title|proc
+Gui, Add, ListView, % (hideScrollbars ? "x0" : "x9") " y+8 w490 h500 -VScroll -HScroll -Hdr -Multi Count10 AltSubmit vlist gListViewClick +LV0x10000 -E0x200", index|title|proc|tab
 Gui, Show, % x ? "x" x " y" y " w" w " h" h : "" , Window Switcher
+LV_ModifyCol(4,0)
 WinHide, ahk_id %switcher_id%
 
 
@@ -128,12 +127,11 @@ Return
 ;
 ; Win+space to activate.
 ;
-#space::
-; CapsLock:: ; Use Shift+Capslock to toggle while in use by the hotkey
+; #space::
+CapsLock:: ; Use Shift+Capslock to toggle while in use by the hotkey
 If WinActive("ahk_class Windows.UI.Core.CoreWindow") ; clear the search/start menu if it's open, otherwise it keeps stealing focus
   Send, {esc}
-search =
-lastSearch =
+search := lastSearch := ""
 allwindows := Object()
 GuiControl, , Edit1
 WinShow, ahk_id %switcher_id%
@@ -150,14 +148,14 @@ Return
 Enter::       ;Activate window
 Escape::      ;Close window
 ^Backspace::  ;Clear text
+^w::          ; ''
+^h::          ;Backspace
 Down::        ;Next row
-Tab::         
-^h::
-^k::
-^j::
-^w::
+Tab::         ; ''
+^k::          ; ''
 Up::          ;Previous row
-+Tab::        
++Tab::        ; ''
+^j::          ; ''
 PgUp::        ;Jump up 4 rows
 PgDn::        ;Jump down 4 rows
 Home::        ;Jump to top
@@ -225,7 +223,7 @@ Return
 Quit() {
   global switcher_id
   Gosub, SaveTimer
-  ExitApp
+  ExitApp 
 }
 
 
@@ -288,44 +286,31 @@ GetAllWindows()
   global switcher_id, filters, ChromeInst, Chromes
   windows := Object()
 
-  WinGet, id, list, , , Program Manager
-  Loop, %id%
-  {
-    StringTrimRight, wid, id%a_index%, 0
-    WinGetTitle, title, ahk_id %wid%
-    StringTrimRight, title, title, 0
-
-    ; FIXME: windows with empty titles?
-    if title =
-      continue
-
-    ; don't add the switcher window
-    if switcher_id = %wid%
-      continue
-
-    ; don't add titles which match any of the filters
-    if IncludedIn(filters, title) > -1
-      continue
-
-    ; replace pipe (|) characters in the window title,
-    ; because Gui Add uses it for separating listbox items
-    StringReplace, title, title, |, -, all
-
-    procName := GetProcessName(wid)
-    windows.Insert({ "id": wid, "title": title, "procName": procName })
-  }
-  If WinExist("ahk_exe chrome.exe") {
-    Try {
-      If (Chromes := Chrome.FindInstances()) {
-        ChromeInst := {"base": Chrome, "DebugPort": Chromes.MinIndex()}
-        list := ChromeInst.GetPageList()
-        for i, e in list {
-          if (InStr(e.type,"page") && !InStr(e.url,"chrome-extension"))
-            windows.Insert({ "url": e.url, "title": e.title, "procName":"Chrome tab" })
+  top := DllCall("GetTopWindow", "Ptr","")
+  Loop {
+  	next :=	DllCall("GetWindow", "Ptr", (A_Index = 1 ? top : next),"uint",2)
+  	WinGetTitle, title, % "ahk_id" next
+  	if title {
+      procName := GetProcessName(next)
+      if (procName = "chrome") {
+        tabs := StrSplit(JEE_ChromeGetTabNames(next),"`n")
+        for i, e in tabs {
+          if (!e || e ~= "i)group.*and \d+ other tabs") ; remove blank titles that appears when there are grouped tabs
+            continue
+          if RegExMatch(e, "i)(.*) - Part of group (.*)", match) ; appends group name to grouped tabs
+            e := match2 " " Chr(0x2022) " " match1
+          windows.Push({"id":next, "title": e, "procName": "Chrome tab", "num": i})
         }
+      } else if (procName = "firefox") {
+        tabs := StrSplit(JEE_FirefoxGetTabNames(next),"`n")
+        for i, e in tabs
+          windows.Push({"id":next, "title": e, "procName": "Firefox tab", "num": i})
+      } Else {
+        windows.Push({ "id": next, "title": title, "procName": procName })
       }
-    }
-  }
+  	}
+  } Until (!next)
+
   return windows
 }
 
@@ -337,7 +322,7 @@ RefreshWindowList()
 {
   global allwindows, windows
   global search, lastSearch, refreshEveryKeystroke
-    if (search ~= "^\d+")
+  if (search ~= "^\d+")
     return
   uninitialized := (allwindows.MinIndex() = "")
 
@@ -481,36 +466,33 @@ ActivateWindow(rowNum := "")
 {
   global windows, ChromeInst
 
-  If !rowNum
+  If !rowNum  
     rowNum:= LV_GetNext(0)
   If (rowNum > LV_GetCount())
     return
+  LV_GetText(title, rowNum, 3)
+  LV_GetText(tab, rowNum, 4)
   Gui Submit
   wid := windows[rowNum].id
   procName := windows[rowNum].procName
+  url := windows[rowNum].url
+  num := windows[rowNum].num
   ; In some cases, calling WinMinimize minimizes the window, but it retains its
   ; focus preventing WinActivate from raising window.
-  If (procName = "Chrome tab") {
-    Try {
-      url := windows[rowNum].url
-      page := ChromeInst.GetPageByURL(url,"exact")
-      page.Call("Page.bringToFront")
-      WinActivate, ahk_exe chrome.exe
-      page.Disconnect()
-    }
-  } Else {
-    IfWinActive, ahk_id %wid%
+  If (procName = "Chrome tab")
+    JEE_ChromeFocusTabByNum(wid,num)
+  Else If (procName = "Firefox tab")
+    JEE_FirefoxFocusTabByNum(wid,num)
+  IfWinActive, ahk_id %wid%
+  {
+    WinGet, state, MinMax, ahk_id %wid%
+    if (state = -1)
     {
-      WinGet, state, MinMax, ahk_id %wid%
-      if (state = -1)
-      {
-        WinRestore, ahk_id %wid%
-      }
-    } else {
-      WinActivate, ahk_id %wid%
+      WinRestore, ahk_id %wid%
     }
+  } else {
+    WinActivate, ahk_id %wid%
   }
-
   LV_Delete()
 }
 
@@ -537,6 +519,7 @@ DrawListView(windows)
     wid := window.id
     title := window.title
     procName := window.procName
+    tab := window.num
 
     ; Retrieves an 8-digit hexadecimal number representing extended style of a window.
     WinGet, style, ExStyle, ahk_id %wid%
@@ -556,10 +539,12 @@ DrawListView(windows)
 
     iconNumber =
 
-    if (procName = "Chrome tab" or isAppWindow or ( !ownerHwnd and !isToolWindow ))
+    if (procName = "Chrome tab" or procName = "Firefox tab" or isAppWindow or ( !ownerHwnd and !isToolWindow ))
     {
       if (procName = "Chrome tab") ; Apply the Chrome icon to found Chrome tabs
         wid := WinExist("ahk_exe chrome.exe")
+      else if (procName = "Firefox tab")
+        wid := WinExist("ahk_exe firefox.exe")
       ; http://www.autohotkey.com/docs/misc/SendMessageList.htm
       WM_GETICON := 0x7F
 
@@ -611,11 +596,11 @@ DrawListView(windows)
         iconNumber := IL_Add(imageListID, "C:\WINDOWS\system32\shell32.dll", 217) ; generic control panel icon
     }
 
-    if (iconNumber < 1 || (procName == "chrome" && IsObject(Chromes))) { ; Don't list the Chrome window if connected to debug session
+    if (iconNumber < 1) {
       removedRows.Insert(idx)
     } else {
       iconCount+=1
-      LV_Add("Icon" . iconNumber, iconCount, window.procName, title)
+      LV_Add("Icon" . iconNumber, iconCount, window.procName, title, tab)
     }
   }
 
@@ -623,7 +608,7 @@ DrawListView(windows)
   windowCount-=removedRows.MaxIndex()
   For key,rowNum in removedRows
   {
-    windows.Remove(rowNum)
+    windows.RemoveAt(rowNum)
   }
 
   LV_Modify(1, "Select Focus")
@@ -768,7 +753,6 @@ WM_NCHITTEST(wParam, lParam)
         return
 
     WinGetPos, gX, gY, gW, gH
-    gH -= 10, gW -= 10
     x := lParam<<48>>48, y := lParam<<32>>48
 
     hit_left := x < gX+border_size
@@ -801,3 +785,616 @@ WM_NCHITTEST(wParam, lParam)
 
     ; else let default hit-testing be done
 }
+
+
+;==================================================
+
+;Chrome functions suite (tested on Chrome v77):
+
+;requires Acc.ahk:
+;Acc library (MSAA) and AccViewer download links - AutoHotkey Community
+;https://autohotkey.com/boards/viewtopic.php?f=6&t=26201
+
+;JEE_ChromeAccInit(vValue)
+;JEE_ChromeGetUrl(hWnd:="", vOpt:="")
+;JEE_ChromeGetTabCount(hWnd:="")
+;JEE_ChromeGetTabNames(hWnd:="", vSep:="`n")
+;JEE_ChromeFocusTabByNum(hWnd:="", vNum:="")
+;JEE_ChromeFocusTabByName(hWnd:="", vTitle:="", vNum:="")
+;JEE_ChromeGetFocusedTabNum(hWnd:="")
+;JEE_ChromeAddressBarIsFoc(hWnd:="")
+;JEE_ChromeCloseOtherTabs(hWnd:="", vOpt:="", vNum:="")
+
+;note: you can only get the url for the *active* tab via Acc,
+;to get the urls for other tabs, you could use a browser extension, see:
+;Firefox/Chrome: copy titles/urls to the clipboard - AutoHotkey Community
+;https://autohotkey.com/boards/viewtopic.php?f=22&t=66246
+
+;==================================================
+
+;note: these Acc paths often change:
+;Acc paths determined via:
+;[JEE_AccGetTextAll function]
+;Acc: get text from all window/control elements - AutoHotkey Community
+;https://autohotkey.com/boards/viewtopic.php?f=6&t=40615
+
+JEE_ChromeAccInit(vValue)
+{
+	if (vValue = "U1")
+		return "4.1.2.1.2.5.2" ;address bar
+	if (vValue = "U2")
+		return "4.1.2.2.2.5.2" ;address bar
+	if (vValue = "T")
+		return "4.1.2.1.1.1" ;tabs (append '.1' to get the first tab)
+}
+
+;==================================================
+
+JEE_ChromeGetUrl(hWnd:="", vOpt:="")
+{
+	local
+	static vAccPath1 := JEE_ChromeAccInit("U1")
+	static vAccPath2 := JEE_ChromeAccInit("U2")
+	if (hWnd = "")
+		hWnd := WinExist("A")
+	oAcc := Acc_Get("Object", vAccPath1, 0, "ahk_id " hWnd)
+	if !IsObject(oAcc)
+	|| !(oAcc.accName(0) = "Address and search bar")
+		oAcc := Acc_Get("Object", vAccPath2, 0, "ahk_id " hWnd)
+	vUrl := oAcc.accValue(0)
+	oAcc := ""
+
+	if InStr(vOpt, "x")
+	{
+		if !(vUrl = "") && !InStr(vUrl, "://")
+			vUrl := "http://" vUrl
+	}
+	return vUrl
+}
+
+;==================================================
+
+JEE_ChromeGetTabCount(hWnd:="")
+{
+	local
+	static vAccPath := JEE_ChromeAccInit("T")
+	if (hWnd = "")
+		hWnd := WinExist("A")
+	oAcc := Acc_Get("Object", vAccPath, 0, "ahk_id " hWnd)
+	vCount := 0
+	for _, oChild in Acc_Children(oAcc)
+	{
+		;ROLE_SYSTEM_PUSHBUTTON := 0x2B
+		if (oChild.accRole(0) = 0x2B)
+			continue
+		vCount++
+	}
+	oAcc := oChild := ""
+	return vCount
+}
+
+;==================================================
+
+JEE_ChromeGetTabNames(hWnd:="", vSep:="`n")
+{
+	local
+	static vAccPath := JEE_ChromeAccInit("T")
+	if (hWnd = "")
+		hWnd := WinExist("A")
+	oAcc := Acc_Get("Object", vAccPath, 0, "ahk_id " hWnd)
+
+	vHasSep := !(vSep = "")
+	if vHasSep
+		vOutput := ""
+	else
+		oOutput := []
+	for _, oChild in Acc_Children(oAcc)
+	{
+		;ROLE_SYSTEM_PUSHBUTTON := 0x2B
+		if (oChild.accRole(0) = 0x2B)
+			continue
+		try vTabText := oChild.accName(0)
+		catch
+			vTabText := ""
+		if vHasSep
+			vOutput .= vTabText vSep
+		else
+			oOutput.Push(vTabText)
+	}
+	oAcc := oChild := ""
+	return vHasSep ? SubStr(vOutput, 1, -StrLen(vSep)) : oOutput
+}
+
+;==================================================
+
+JEE_ChromeFocusTabByNum(hWnd:="", vNum:="")
+{
+	local
+	static vAccPath := JEE_ChromeAccInit("T")
+	if (hWnd = "")
+		hWnd := WinExist("A")
+	if !vNum
+		return
+	oAcc := Acc_Get("Object", vAccPath, 0, "ahk_id " hWnd)
+	if !Acc_Children(oAcc)[vNum]
+		vNum := ""
+	else
+		Acc_Children(oAcc)[vNum].accDoDefaultAction(0)
+	oAcc := ""
+	return vNum
+}
+
+;==================================================
+
+JEE_ChromeFocusTabByName(hWnd:="", vTitle:="", vNum:="")
+{
+	local
+	static vAccPath := JEE_ChromeAccInit("T")
+	if (hWnd = "")
+		hWnd := WinExist("A")
+	if (vNum = "")
+		vNum := 1
+	oAcc := Acc_Get("Object", vAccPath, 0, "ahk_id " hWnd)
+	vCount := 0, vRet := 0
+	for _, oChild in Acc_Children(oAcc)
+	{
+		vTabText := oChild.accName(0)
+		if (vTabText = vTitle)
+			vCount++
+		if (vCount = vNum)
+		{
+			oChild.accDoDefaultAction(0), vRet := A_Index
+			break
+		}
+	}
+	oAcc := oChild := ""
+	return vRet
+}
+
+;==================================================
+
+JEE_ChromeGetFocusedTabNum(hWnd:="")
+{
+	local
+	static vAccPath := JEE_ChromeAccInit("T")
+	if (hWnd = "")
+		hWnd := WinExist("A")
+	oAcc := Acc_Get("Object", vAccPath, 0, "ahk_id " hWnd)
+	vRet := 0
+	for _, oChild in Acc_Children(oAcc)
+	{
+		;STATE_SYSTEM_SELECTED := 0x2
+		if (oChild.accState(0) & 0x2)
+		{
+			vRet := A_Index
+			break
+		}
+	}
+	oAcc := oChild := ""
+	return vRet
+}
+
+;==================================================
+
+JEE_ChromeAddressBarIsFoc(hWnd:="")
+{
+	local
+	static vAccPath1 := JEE_ChromeAccInit("U1")
+	static vAccPath2 := JEE_ChromeAccInit("U2")
+	if (hWnd = "")
+		hWnd := WinExist("A")
+	oAcc := Acc_Get("Object", vAccPath1, 0, "ahk_id " hWnd)
+	if !IsObject(oAcc)
+	|| !(oAcc.accName(0) = "Address and search bar")
+		oAcc := Acc_Get("Object", vAccPath2, 0, "ahk_id " hWnd)
+	;STATE_SYSTEM_FOCUSED := 0x4
+	vIsFoc := !!(oAcc.accState(0) & 0x4)
+	oAcc := ""
+	return vIsFoc
+}
+
+;==================================================
+
+;vOpt: L (close tabs to the left)
+;vOpt: R (close tabs to the right)
+;vOpt: LR (close other tabs)
+;vOpt: (blank) (close other tabs)
+;vNum: specify a tab other than the focused tab
+JEE_ChromeCloseOtherTabs(hWnd:="", vOpt:="", vNum:="")
+{
+	local
+	static vAccPath := JEE_ChromeAccInit("T")
+	if (hWnd = "")
+		hWnd := WinExist("A")
+	if (vNum = "")
+		vNum := JEE_ChromeGetFocusedTabNum(hWnd)
+	if (vOpt = "")
+		vOpt := "LR"
+	vDoCloseLeft := !!InStr(vOpt, "L")
+	vDoCloseRight := !!InStr(vOpt, "R")
+
+	oAcc := Acc_Get("Object", vAccPath, 0, "ahk_id " hWnd)
+	vRet := 0
+	oChildren := Acc_Children(oAcc)
+	vIndex := oChildren.Length() + 1
+	Loop % vIndex - 1
+	{
+		vIndex--
+		oChild := oChildren[vIndex]
+		;ROLE_SYSTEM_PUSHBUTTON := 0x2B
+		if (oChild.accRole(0) = 0x2B)
+			continue
+		if (vIndex = vNum)
+			continue
+		if (vIndex > vNum) && !vDoCloseRight
+			continue
+		if (vIndex < vNum) && !vDoCloseLeft
+			continue
+		oChild2 := Acc_Children(oChild).4
+		if (oChild2.accName(0) = "Close")
+			oChild2.accDoDefaultAction(0)
+		oChild2 := ""
+	}
+	oAcc := oChild := ""
+	return vRet
+}
+
+;==================================================
+
+;Firefox functions suite (tested on Firefox v69):
+
+;requires Acc.ahk:
+;Acc library (MSAA) and AccViewer download links - AutoHotkey Community
+;https://autohotkey.com/boards/viewtopic.php?f=6&t=26201
+
+;JEE_FirefoxAccInit(vValue)
+;JEE_FirefoxGetUrl(hWnd:="", vOpt:="")
+;JEE_FirefoxGetTabCount(hWnd:="")
+;JEE_FirefoxGetTabNames(hWnd:="", vSep:="`n")
+;JEE_FirefoxFocusTabByNum(hWnd:="", vNum:="")
+;JEE_FirefoxFocusTabByName(hWnd:="", vTitle:="", vNum:="")
+;JEE_FirefoxGetFocusedTabNum(hWnd:="")
+;JEE_FirefoxAddressBarIsFoc(hWnd:="")
+;JEE_FirefoxCloseOtherTabs(hWnd:="", vOpt:="", vNum:="")
+
+;warning: JEE_FirefoxCloseOtherTabs:
+;there is no separate Close button Acc element to do accDoDefaultAction on,
+;so at present, each tab is focused, and Ctrl+W is sent to it, which is unreliable
+
+;note: you can only get the url for the *active* tab via Acc,
+;to get the urls for other tabs, you could use a browser extension, see:
+;Firefox/Chrome: copy titles/urls to the clipboard - AutoHotkey Community
+;https://autohotkey.com/boards/viewtopic.php?f=22&t=66246
+
+;==================================================
+
+;note: this function is redundant
+;note: an equivalent function is needed for Chrome
+JEE_FirefoxAccInit(vValue)
+{
+	local
+}
+
+;==================================================
+
+JEE_FirefoxGetUrl(hWnd:="", vOpt:="")
+{
+	local
+	if (hWnd = "")
+		hWnd := WinExist("A")
+	Loop 10
+	{
+		vIndex := A_Index
+		vAccPath := "application.tool_bar3.combo_box1.editable_text"
+		;vAccPath := "4.25.3.2"
+		if InStr(vOpt, "p") ;(pop-up window)
+			vAccPath := "application.tool_bar1.combo_box1.editable_text"
+		oAcc := Acc_Get("Object", vAccPath, 0, "ahk_id " hWnd)
+		if !ErrorLevel
+			break
+		;Sleep(100)
+		DllCall("kernel32\Sleep", "UInt",100)
+	}
+	if (vIndex = 10)
+		return
+
+	vUrl := ""
+	try vUrl := oAcc.accValue(0)
+	oAcc := ""
+
+	if InStr(vOpt, "x")
+	{
+		if !(vUrl = "") && !InStr(vUrl, "://")
+			vUrl := "http://" vUrl
+	}
+	return vUrl
+}
+
+;==================================================
+
+JEE_FirefoxGetTabCount(hWnd:="")
+{
+	local
+	if (hWnd = "")
+		hWnd := WinExist("A")
+	oAcc := Acc_Get("Object", "4", 0, "ahk_id " hWnd)
+	vRet := 0
+	for _, oChild in Acc_Children(oAcc)
+	{
+		if (oChild.accName(0) == "Browser tabs")
+		{
+			oAcc := Acc_Children(oChild).1, vRet := 1
+			break
+		}
+	}
+	if !vRet
+	{
+		oAcc := oChild := ""
+		return
+	}
+
+	vCount := 0
+	for _, oChild in Acc_Children(oAcc)
+	{
+		;ROLE_SYSTEM_PUSHBUTTON := 0x2B
+		if (oChild.accRole(0) = 0x2B)
+			continue
+		vCount++
+	}
+	oAcc := oChild := ""
+	return vCount
+}
+
+;==================================================
+
+JEE_FirefoxGetTabNames(hWnd:="", vSep:="`n")
+{
+	local
+	if (hWnd = "")
+		hWnd := WinExist("A")
+	oAcc := Acc_Get("Object", "4", 0, "ahk_id " hWnd)
+	vRet := 0
+	for _, oChild in Acc_Children(oAcc)
+	{
+		if (oChild.accName(0) == "Browser tabs")
+		{
+			oAcc := Acc_Children(oChild).1, vRet := 1
+			break
+		}
+	}
+	if !vRet
+	{
+		oAcc := oChild := ""
+		return
+	}
+
+	vHasSep := !(vSep = "")
+	if vHasSep
+		vOutput := ""
+	else
+		oOutput := []
+	for _, oChild in Acc_Children(oAcc)
+	{
+		;ROLE_SYSTEM_PUSHBUTTON := 0x2B
+		if (oChild.accRole(0) = 0x2B)
+			continue
+		try vTabText := oChild.accName(0)
+		catch
+			vTabText := ""
+		if vHasSep
+			vOutput .= vTabText vSep
+		else
+			oOutput.Push(vTabText)
+	}
+	oAcc := oChild := ""
+	return vHasSep ? SubStr(vOutput, 1, -StrLen(vSep)) : oOutput
+}
+
+;==================================================
+
+JEE_FirefoxFocusTabByNum(hWnd:="", vNum:="")
+{
+	local
+	if (hWnd = "")
+		hWnd := WinExist("A")
+	if !vNum
+		return
+	oAcc := Acc_Get("Object", "4", 0, "ahk_id " hWnd)
+	vRet := 0
+	for _, oChild in Acc_Children(oAcc)
+	{
+		if (oChild.accName(0) == "Browser tabs")
+		{
+			oAcc := Acc_Children(oChild).1, vRet := 1
+			break
+		}
+	}
+	if !vRet || !Acc_Children(oAcc)[vNum]
+		vNum := ""
+	else
+		Acc_Children(oAcc)[vNum].accDoDefaultAction(0)
+	oAcc := oChild := ""
+	return vNum
+}
+
+;==================================================
+
+JEE_FirefoxFocusTabByName(hWnd:="", vTitle:="", vNum:="")
+{
+	local
+	if (hWnd = "")
+		hWnd := WinExist("A")
+	if (vNum = "")
+		vNum := 1
+	oAcc := Acc_Get("Object", "4", 0, "ahk_id " hWnd)
+	vRet := 0
+	for _, oChild in Acc_Children(oAcc)
+	{
+		if (oChild.accName(0) == "Browser tabs")
+		{
+			oAcc := Acc_Children(oChild).1, vRet := 1
+			break
+		}
+	}
+	if !vRet
+	{
+		oAcc := oChild := ""
+		return
+	}
+
+	vCount := 0, vRet := 0
+	for _, oChild in Acc_Children(oAcc)
+	{
+		vTabText := oChild.accName(0)
+		if (vTabText = vTitle)
+			vCount++
+		if (vCount = vNum)
+		{
+			oChild.accDoDefaultAction(0), vRet := A_Index
+			break
+		}
+	}
+	oAcc := oChild := ""
+	return vRet
+}
+
+;==================================================
+
+JEE_FirefoxGetFocusedTabNum(hWnd:="")
+{
+	local
+	if (hWnd = "")
+		hWnd := WinExist("A")
+	oAcc := Acc_Get("Object", "4", 0, "ahk_id " hWnd)
+	vRet := 0
+	for _, oChild in Acc_Children(oAcc)
+	{
+		if (oChild.accName(0) == "Browser tabs")
+		{
+			oAcc := Acc_Children(oChild).1, vRet := 1
+			break
+		}
+	}
+	if !vRet
+	{
+		oAcc := oChild := ""
+		return
+	}
+
+	vRet := 0
+	for _, oChild in Acc_Children(oAcc)
+	{
+		;STATE_SYSTEM_SELECTED := 0x2
+		if (oChild.accState(0) & 0x2)
+		{
+			vRet := A_Index
+			break
+		}
+	}
+	oAcc := oChild := ""
+	return vRet
+}
+
+;==================================================
+
+JEE_FirefoxAddressBarIsFoc(hWnd:="")
+{
+	local
+	if (hWnd = "")
+		hWnd := WinExist("A")
+	oAcc := Acc_Get("Object", "4", 0, "ahk_id " hWnd)
+	vRet := 0
+	for _, oChild in Acc_Children(oAcc)
+	{
+		if (oChild.accName(0) == "Navigation Toolbar")
+			oAcc := oChild, vRet := 1
+	}
+	if !vRet
+	{
+		oAcc := oChild := ""
+		return
+	}
+
+	oAcc := Acc_Children(oAcc).6
+	oAcc := Acc_Children(oAcc).2
+	;STATE_SYSTEM_FOCUSED := 0x4
+	vIsFoc := !!(oAcc.accState(0) & 0x4)
+	oAcc := oChild := ""
+	return vIsFoc
+}
+
+;==================================================
+
+;vOpt: L (close tabs to the left)
+;vOpt: R (close tabs to the right)
+;vOpt: LR (close other tabs)
+;vOpt: (blank) (close other tabs)
+;vNum: specify a tab other than the focused tab
+JEE_FirefoxCloseOtherTabs(hWnd:="", vOpt:="", vNum:="")
+{
+	local
+	if (hWnd = "")
+		hWnd := WinExist("A")
+	;vWinClass := WinGetClass("ahk_id " hWnd)
+	WinGetClass, vWinClass, % "ahk_id " hWnd
+	if !(vWinClass = "MozillaWindowClass")
+		return
+	if (vNum = "")
+		vNum := JEE_FirefoxGetFocusedTabNum(hWnd)
+	if (vOpt = "")
+		vOpt := "LR"
+	vDoCloseLeft := !!InStr(vOpt, "L")
+	vDoCloseRight := !!InStr(vOpt, "R")
+
+	oAcc := Acc_Get("Object", "4", 0, "ahk_id " hWnd)
+	vRet := 0
+	for _, oChild in Acc_Children(oAcc)
+	{
+		if (oChild.accName(0) == "Browser tabs")
+		{
+			oAcc := Acc_Children(oChild).1, vRet := 1
+			break
+		}
+	}
+	if !vRet
+	{
+		oAcc := oChild := ""
+		return
+	}
+
+	vRet := 0
+	oChildren := Acc_Children(oAcc)
+	vIndex := oChildren.Length() + 1
+	Loop % vIndex - 1
+	{
+		vIndex--
+		oChild := oChildren[vIndex]
+		;ROLE_SYSTEM_PUSHBUTTON := 0x2B
+		try
+		{
+			if (oChild.accRole(0) = 0x2B)
+				continue
+		}
+		if (vIndex = vNum)
+			continue
+		if (vIndex > vNum) && !vDoCloseRight
+			continue
+		if (vIndex < vNum) && !vDoCloseLeft
+			continue
+		;note: cf. Chrome, Firefox doesn't have a separate Close button element
+		;oChild2 := Acc_Children(oChild).4
+		;if (oChild2.accName(0) = "Close")
+		;	oChild2.accDoDefaultAction(0)
+		;oChild2 := ""
+		;instead we focus each tab and send Ctrl+W to it
+		JEE_FirefoxFocusTabByNum(hWnd, vIndex)
+		;Sleep(500)
+		DllCall("kernel32\Sleep", "UInt",500)
+		;ControlSend("{Ctrl down}w{Ctrl up}",, "ahk_id " hWnd)
+		ControlSend, ahk_parent, {Ctrl down}w{Ctrl up}, % "ahk_id " hWnd
+	}
+	oAcc := oChild := ""
+	return vRet
+}
+
+;==================================================
