@@ -4,7 +4,7 @@
 ;
 #SingleInstance force
 #NoTrayIcon
-#Include Accv2.ahk
+#Include lib\Accv2.ahk
 
 ; Use small icons in the listview
 Global compact := true
@@ -15,11 +15,22 @@ Global compact := true
 ; the top and bottom right.
 Global hideScrollBars := true
 
+; Uses tcmatch.dll included with QuickSearch eXtended by Samuel Plentz
+; https://www.ghisler.ch/board/viewtopic.php?t=22592
+; a bit slower, but supports Regex, Simularity, Srch & PinYin; use Winkey+/ to toggle it on/off
+; while iswitch is running, included in lib folder, no license info that I could find
+; see readme in lib folder for details, use the included tcmatch.ahk to change settings
+; By default, for different search modes, start the string with:
+;   ? - for regex
+;   * - for srch
+;   < - for simularity
+useTCMatch := true
+
 ; Activate the window if it's the only match
 activateOnlyMatch := false
 
 ; Hides the UI when focus is lost!
-hideWhenFocusLost := true
+hideWhenFocusLost := false
 
 ; Window titles containing any of the listed substrings are filtered out from results
 ; useful for things like  hiding improperly configured tool windows or screen
@@ -29,8 +40,8 @@ filters := []
 ; Add folders containing files or shortcuts you'd like to show in the list.
 ; Enter new paths as an array
 ; todo: show file extensions/path in the list, etc.
-shortcutFolders := ["C:\Users\" A_UserName "\Desktop"
-,"C:\Users\" A_UserName "\Documents"]
+shortcutFolders := ["C:\Users\" A_UserName "\OneDrive\Desktop"
+,"C:\Users\" A_UserName "\OneDrive\Documents"]
 
 ; Set this to true to update the list of windows every time the search is
 ; updated. This is usually not necessary and creates additional overhead, so
@@ -98,7 +109,7 @@ OnMessage(0x86, "WM_NCACTIVATE")
 fileList := []
 if IsObject(shortcutFolders) {
   for i, e in shortcutFolders
-    Loop, Files, % e "\*"
+    Loop, Files, % e "\*"	
       fileList.Push({"fileName":RegExReplace(A_LoopFileName,"\.\w{3}$"),"path":A_LoopFileFullPath})
 }
 
@@ -136,6 +147,12 @@ Loop 99 {
 
 Return
 
+#'::
+match := TCMatch("Feature request: Include browser tabs as | if they were windows · Issue #1 · tvjg\iswitchw","fea")
+MsgBox, % match
+Return
+
+
 ;----------------------------------------------------------------------
 ;
 ; Win+space to activate.
@@ -158,8 +175,8 @@ If hideWhenFocusLost
 Return
 
 #/::
-toggleMethod := !toggleMethod
-ToolTip, % "Filter mode: " (toggleMethod ? "Old" : "New")
+useTCMatch := !useTCMatch
+ToolTip, % "TC Match: " (useTCMatch ? "On" : "Off")
 SetTimer, tooltipOff, -2000
 Return
 
@@ -220,8 +237,8 @@ GuiSize:
   GuiControl, Move, search, % "w" A_GuiWidth - 52
   LV_ModifyCol(3
   , A_GuiWidth - ( hideScrollBars
-  ? (compact ? 160 : 180)   ; Resizes column 3 to match gui width
-  : (compact ? 190 : 210)))
+  ? (compact ? 170 : 190)   ; Resizes column 3 to match gui width
+  : (compact ? 200 : 220)))
   WinGetPos, x, y, w, h, % "ahk_id" switcher_id
   WinSet, Region , 0-0 w%w% h%h% R15-15, % "ahk_id" switcher_id  ;Sets window region to round off corners
   SetTimer, SaveTimer, -2000
@@ -254,16 +271,20 @@ Quit() {
 ;
 ; Runs whenever Edit control is updated
 SearchChange:
+  Settimer, Refresh, -1
+Return
+
+Refresh:
   if (LV_GetCount() = 1) {
     Gui, Font, c90ee90fj
     GuiControl, Font, Edit1
   }
   Gui, Submit, NoHide
   StartTime := A_TickCount
-  If toggleMethod
-    RefreshWindowListOld()
-  Else
+  If useTCMatch
     RefreshWindowList()
+  Else
+    RefreshWindowListOld()
   ElapsedTime := A_TickCount - StartTime
   If (LV_GetCount() > 1) {
     Gui, Font, % LV_GetCount() > 1 && windows.MaxIndex() < 1 ? "cff2626" : "cEEE8D5"
@@ -275,6 +296,7 @@ SearchChange:
   For i, e in windows {
     str .= Format("{:-4} {:-15} {:-55}Score: {}`n",A_Index ":",SubStr(e.procName,1,14),StrLen(e.title) > 50 ? SubStr(e.title,1,50) "..." : e.title,e.score)
   }
+  if search
   OutputDebug, % "lvcount: " LV_GetCount() " - windows: " windows.MaxIndex()
   . "`n------------------------------------------------------------------------------------------------" 
   . Format("`nNew filter: {} | Result count: {:-4} | Time: {:-4} | Search string: {} ",toggleMethod ? "On " : "Off",LV_GetCount(),ElapsedTime,search)
@@ -342,6 +364,14 @@ GetAllWindows()
         tabs := StrSplit(JEE_FirefoxGetTabNames(next),"`n")
         for i, e in tabs
           windows.Push({"id":next, "title": e, "procName": "Firefox tab", "num": i})
+      } else if (procName = "vivaldi") {
+        tabs := StrSplit(VivaldiGetTabNames(next),"`n")
+        for i, e in tabs {
+          tab := StrSplit(e, "¥")
+          if !tab.1
+            continue
+          windows.Push({"id":next, "title": tab.1, "procName": "Vivaldi tab", "num": tab.2, "row": tab.3})
+        }
       } Else {
         windows.Push({ "id": next, "title": title, "procName": procName })
       }
@@ -358,29 +388,31 @@ RefreshWindowList() {
     return  
   windows := []
   toRemove := ""
-  If (!search || refreshEveryKeystroke) {
+  If (!search || refreshEvery`Keystroke) {
     allwindows := GetAllWindows()
     for _, e in fileList {
-      allwindows.Push({"procname":"Shortcut","title":e.fileName,"path":e.path})
-    }  
+      path := e.path 
+      SplitPath, path, OutFileName, OutDir, OutExt, OutNameNoExt, OutDrive
+      RegExMatch(OutDir, "\\(\w+)$", folder)
+      allwindows.Push({"procname":folder1,"title":e.fileName . (!RegExMatch(OutExt,"txt|lnk") ? "." OutExt : "" ),"path":e.path})
+    }
   }
-  regex := BuildFilterExpression(search)
-  For i, e in allwindows {
-      str := e.procname . " " . e.title
-      If (str ~= regex) {
-        If scoreMatches
-          e.score := FuzzySearch(search, str)
-        windows.Push(e)
-      } Else If search {
-        toRemove .= i ","
-      }
+  for i, e in allwindows {
+    str := e.procName " " e.title
+    if !search || TCMatch(str,search) {
+      If scoreMatches
+        e.score := FuzzySearch(search, str)
+      windows.Push(e)
+    } else {
+      toRemove .= i ","
+    }
   }
   If scoreMatches
     windows := objectSort(windows, "score")
-  for i, e in StrSplit(toRemove,",")
-    allwindows.Delete(e)
   OutputDebug, % "Allwindows count: " allwindows.MaxIndex() " | windows count: " windows.MaxIndex() "`n"
   DrawListView(windows)
+  for i, e in StrSplit(toRemove,",")
+    allwindows.Delete(e)
 }
 
 /* ObjectSort() by bichlepa
@@ -611,6 +643,8 @@ ActivateWindow(rowNum := "")
       JEE_ChromeFocusTabByNum(wid,num)
     Else If (procName = "Firefox tab")
       JEE_FirefoxFocusTabByNum(wid,num)
+    Else If (procName = "Vivaldi tab")
+      VivaldiFocusTabByNum(wid,num,window.row)
     IfWinActive, ahk_id %wid%
     {
       WinGet, state, MinMax, ahk_id %wid%
@@ -692,55 +726,59 @@ DrawListView(windows)
       }
       if (iconHandle <> 0)
         iconNumber := DllCall("ImageList_ReplaceIcon", UInt, imageListID, Int, -1, UInt, iconHandle) + 1
-    } else if (procName ~= "Chrome tab|Firefox tab" || isAppWindow || ( !ownerHwnd and !isToolWindow )) {
-      if (procName = "Chrome tab") ; Apply the Chrome icon to found Chrome tabs
-        wid := WinExist("ahk_exe chrome.exe")
-      else if (procName = "Firefox tab")
-        wid := WinExist("ahk_exe firefox.exe")
-      ; http://www.autohotkey.com/docs/misc/SendMessageList.htm
-      WM_GETICON := 0x7F
+    } else if (procName ~= "(Chrome|Firefox|Vivaldi) tab" || isAppWindow || ( !ownerHwnd and !isToolWindow )) {
+      if !(iconHandle := window.icon) {
+        if (procName = "Chrome tab") ; Apply the Chrome icon to found Chrome tabs
+          wid := WinExist("ahk_exe chrome.exe")
+        else if (procName = "Firefox tab")
+          wid := WinExist("ahk_exe firefox.exe")
+        else if (procName = "Vivaldi tab")
+          wid := WinExist("ahk_exe vivaldi.exe")
+        ; http://www.autohotkey.com/docs/misc/SendMessageList.htm
+        WM_GETICON := 0x7F
 
-      ; http://msdn.microsoft.com/en-us/library/windows/desktop/ms632625(v=vs.85).aspx
-      ICON_BIG := 1
-      ICON_SMALL2 := 2
-      ICON_SMALL := 0
+        ; http://msdn.microsoft.com/en-us/library/windows/desktop/ms632625(v=vs.85).aspx
+        ICON_BIG := 1
+        ICON_SMALL2 := 2
+        ICON_SMALL := 0
 
-      SendMessage, WM_GETICON, ICON_BIG, 0, , ahk_id %wid%
-      iconHandle := ErrorLevel
-
-      if (iconHandle = 0)
-      {
-        SendMessage, WM_GETICON, ICON_SMALL2, 0, , ahk_id %wid%
+        SendMessage, WM_GETICON, ICON_BIG, 0, , ahk_id %wid%
         iconHandle := ErrorLevel
 
         if (iconHandle = 0)
         {
-          SendMessage, WM_GETICON, ICON_SMALL, 0, , ahk_id %wid%
+          SendMessage, WM_GETICON, ICON_SMALL2, 0, , ahk_id %wid%
           iconHandle := ErrorLevel
 
           if (iconHandle = 0)
           {
-            ; http://msdn.microsoft.com/en-us/library/windows/desktop/ms633581(v=vs.85).aspx
-            ; To write code that is compatible with both 32-bit and 64-bit
-            ; versions of Windows, use GetClassLongPtr. When compiling for 32-bit
-            ; Windows, GetClassLongPtr is defined as a call to the GetClassLong
-            ; function.
-            iconHandle := DllCall("GetClassLongPtr", "uint", wid, "int", -14) ; GCL_HICON is -14
+            SendMessage, WM_GETICON, ICON_SMALL, 0, , ahk_id %wid%
+            iconHandle := ErrorLevel
 
             if (iconHandle = 0)
             {
-              iconHandle := DllCall("GetClassLongPtr", "uint", wid, "int", -34) ; GCL_HICONSM is -34
+              ; http://msdn.microsoft.com/en-us/library/windows/desktop/ms633581(v=vs.85).aspx
+              ; To write code that is compatible with both 32-bit and 64-bit
+              ; versions of Windows, use GetClassLongPtr. When compiling for 32-bit
+              ; Windows, GetClassLongPtr is defined as a call to the GetClassLong
+              ; function.
+              iconHandle := DllCall("GetClassLongPtr", "uint", wid, "int", -14) ; GCL_HICON is -14
 
-              if (iconHandle = 0) {
-                iconHandle := DllCall("LoadIcon", "uint", 0, "uint", 32512) ; IDI_APPLICATION is 32512
+              if (iconHandle = 0)
+              {
+                iconHandle := DllCall("GetClassLongPtr", "uint", wid, "int", -34) ; GCL_HICONSM is -34
+
+                if (iconHandle = 0) {
+                  iconHandle := DllCall("LoadIcon", "uint", 0, "uint", 32512) ; IDI_APPLICATION is 32512
+                }
               }
             }
           }
         }
       }
-
       if (iconHandle <> 0) {
         iconNumber := DllCall("ImageList_ReplaceIcon", UInt, imageListID, Int, -1, UInt, iconHandle) + 1
+        window.icon := iconHandle
       }
 
     } else {
@@ -766,7 +804,7 @@ DrawListView(windows)
 
   LV_Modify(1, "Select Focus")
 
-  LV_ModifyCol(1,compact ? 40 : 60)
+  LV_ModifyCol(1,compact ? 50 : 70)
   LV_ModifyCol(2,110)
   If (windows.Count() = 1 && activateOnlyMatch)
     ActivateWindow(1)
@@ -939,6 +977,47 @@ WM_NCHITTEST(wParam, lParam)
     ; else let default hit-testing be done
 }
 
+; Needs improvement, can currently only get tab names for stacked tab groups if they're visible/expanded
+VivaldiGetTabNames(hwnd) {
+    ; oAcc := Acc_Get("Object", "4.1.2.1.1.1.1.1.1.2", 0, "ahk_exe vivaldi.exe")
+    oAcc := Acc_Get("Object", "4.1.2.1.1.1.1.1.1.2.1.1.1", 0, "ahk_id" hwnd)
+    oAcc2 := Acc_Get("Object", "4.1.2.1.1.1.1.1.1.2.2.1", 0, "ahk_id" hwnd)
+	vRet := 0
+	Loop 2 {
+    row++
+    i := ""
+    	oChildren := Acc_Children(A_Index = 1 ? oAcc : oAcc2)
+		for _, oChild in oChildren
+		{
+    	    oGrandchild := Acc_Children(oChild)[1]
+			if (oGrandchild.accRole(0) = 20 && name := oGrandchild.accName(0) )
+			{
+				i++
+    	        str .= name "¥" i "¥" row "`n"
+			}
+		}
+	}
+    return str
+}
+
+VivaldiFocusTabByNum(hWnd:="", vNum:="", row := "")
+{
+	local
+	if !vNum
+		return
+	if (hWnd = "")
+		hWnd := WinExist("A")
+  if (row = 1) {
+    tabRow := Acc_Get("Object", "4.1.2.1.1.1.1.1.1.2.1.1.1", 0, "ahk_id" hwnd)
+    Acc_Children(tabRow)[vNum].accDoDefaultAction(0)
+  } else if (row = 2) {
+    tabRow2 := Acc_Get("Object", "4.1.2.1.1.1.1.1.1.2.2.1", 0, "ahk_id" hwnd)
+    Acc_Children(tabRow2)[vNum].accDoDefaultAction(0)
+  } else {
+    vNum := ""
+  }
+	return vNum
+}
 
 ;==================================================
 
@@ -1551,3 +1630,15 @@ JEE_FirefoxCloseOtherTabs(hWnd:="", vOpt:="", vNum:="")
 }
 
 ;==================================================
+
+TCMatch(aHaystack, aNeedle)
+{
+  chars := "/\[^$.|?*+(){}"
+  for i, e in StrSplit(chars)
+    aHaystack := StrReplace(aHaystack, e, A_Space)
+  if (A_PtrSize == 8)
+  {
+    return DllCall("lib\TCMatch64\MatchFileW", "WStr", aNeedle, "WStr", aHaystack)
+  }
+  return DllCall("lib\TCMatch\MatchFileW", "WStr", aNeedle, "WStr", aHaystack)
+}
