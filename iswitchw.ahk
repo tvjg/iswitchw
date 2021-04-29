@@ -30,7 +30,7 @@ useTCMatch := true
 activateOnlyMatch := false
 
 ; Hides the UI when focus is lost!
-hideWhenFocusLost := false
+hideWhenFocusLost := true
 
 ; Window titles containing any of the listed substrings are filtered out from results
 ; useful for things like  hiding improperly configured tool windows or screen
@@ -139,19 +139,13 @@ for i, e in numkey {
 }
 
 ; Define hotstrings for selecting rows, by typing the number with a space after
-Loop 99 {
+Loop 300 {
     KeyFunc := Func("ActivateWindow").Bind(A_Index)
     Hotkey, IfWinActive, % "ahk_id" switcher_id
     Hotstring(":X:" A_Index , KeyFunc)
 }
 
 Return
-
-#'::
-match := TCMatch("Feature request: Include browser tabs as | if they were windows · Issue #1 · tvjg\iswitchw","fea")
-MsgBox, % match
-Return
-
 
 ;----------------------------------------------------------------------
 ;
@@ -388,7 +382,7 @@ RefreshWindowList() {
     return  
   windows := []
   toRemove := ""
-  If (!search || refreshEvery`Keystroke) {
+  If (!search || refreshEveryKeystroke || StrLen(search) < StrLen(lastSearch)) {
     allwindows := GetAllWindows()
     for _, e in fileList {
       path := e.path 
@@ -397,6 +391,7 @@ RefreshWindowList() {
       allwindows.Push({"procname":folder1,"title":e.fileName . (!RegExMatch(OutExt,"txt|lnk") ? "." OutExt : "" ),"path":e.path})
     }
   }
+  lastSearch := search
   for i, e in allwindows {
     str := e.procName " " e.title
     if !search || TCMatch(str,search) {
@@ -1636,6 +1631,8 @@ TCMatch(aHaystack, aNeedle)
   chars := "/\[^$.|?*+(){}"
   for i, e in StrSplit(chars)
     aHaystack := StrReplace(aHaystack, e, A_Space)
+  ; If !RegExMatch(aNeedle, "^[*?<]")
+    ; aNeedle := "*" aNeedle
   if (A_PtrSize == 8)
   {
     return DllCall("lib\TCMatch64\MatchFileW", "WStr", aNeedle, "WStr", aHaystack)
