@@ -1,5 +1,20 @@
 ;----------------------------------------------------------------------
 ;
+; NOTE: for browser tab support in Vivaldi, accessibility features must
+; be enabled by going to vivaldi://accessibility, and ensuring that both
+; "Native accessibility API support" & "Web accessibility" are enabled.
+; At present, only tabs positioned up top is supported.
+; 
+; Also, change the following settings for the best results:
+; Tabs > Tab Features > Minimize Active Tab: set to Off
+; Tabs > Tab Features > Tab Stacking: set to Compact
+;
+; A current limitation is that if the tab-bar gets too crowded, where the
+; text is no longer visible, it will no longer be able to locate the tabs
+;
+
+;----------------------------------------------------------------------
+;
 ; User configuration
 ;
 #SingleInstance force
@@ -350,9 +365,15 @@ GetAllWindows()
         for i, e in tabs {
           if (!e || e ~= "i)group.*and \d+ other tabs") ; remove blank titles that appears when there are grouped tabs
             continue
-          if RegExMatch(e, "i)(.*) - Part of group (.*)", match) ; appends group name to grouped tabs
-            e := match2 " " Chr(0x2022) " " match1
+          if RegExMatch(e, "i)(.*) - Part of.*group\s?(.*)", match) ; appends group name to grouped tabs
+            e := (match2 ? match2 : "Group") . " " . Chr(0x2022) . " " . match1
           windows.Push({"id":next, "title": e, "procName": "Chrome tab", "num": i})
+
+/* 
+str2 .= RepStr(A_Space,3) . Chr(0x25AA) " " oStepchild.accName(0) . "¥" . vNum . "¥" . 2 . "¥" vNum2 "`n"
+name := Chr(0x25CF) " " name
+*/
+
         }
       } else if (procName = "firefox") {
         tabs := StrSplit(JEE_FirefoxGetTabNames(next),"`n")
@@ -364,7 +385,7 @@ GetAllWindows()
           tab := StrSplit(e, "¥")
           if !tab.1
             continue
-          windows.Push({"id":next, "title": tab.1, "procName": "Vivaldi tab", "num": tab.2, "row": tab.3})
+          windows.Push({"id":next, "title": tab.1, "procName": "Vivaldi tab", "num": tab.2, "row": tab.3, "num2": tab.4})
         }
       } Else {
         windows.Push({ "id": next, "title": title, "procName": procName })
@@ -639,7 +660,7 @@ ActivateWindow(rowNum := "")
     Else If (procName = "Firefox tab")
       JEE_FirefoxFocusTabByNum(wid,num)
     Else If (procName = "Vivaldi tab")
-      VivaldiFocusTabByNum(wid,num,window.row)
+      VivaldiFocusTabByNum(wid,num,window.row,window.num2)
     IfWinActive, ahk_id %wid%
     {
       WinGet, state, MinMax, ahk_id %wid%
@@ -974,45 +995,67 @@ WM_NCHITTEST(wParam, lParam)
 
 ; Needs improvement, can currently only get tab names for stacked tab groups if they're visible/expanded
 VivaldiGetTabNames(hwnd) {
-    ; oAcc := Acc_Get("Object", "4.1.2.1.1.1.1.1.1.2", 0, "ahk_exe vivaldi.exe")
     oAcc := Acc_Get("Object", "4.1.2.1.1.1.1.1.1.2.1.1.1", 0, "ahk_id" hwnd)
-    oAcc2 := Acc_Get("Object", "4.1.2.1.1.1.1.1.1.2.2.1", 0, "ahk_id" hwnd)
-	vRet := 0
-	Loop 2 {
-    row++
-    i := ""
-    	oChildren := Acc_Children(A_Index = 1 ? oAcc : oAcc2)
+    oChildren := Acc_Children(oAcc)
 		for _, oChild in oChildren
 		{
-    	    oGrandchild := Acc_Children(oChild)[1]
-			if (oGrandchild.accRole(0) = 20 && name := oGrandchild.accName(0) )
+			if ( name := oChild.accName(1) )
 			{
-				i++
-    	        str .= name "¥" i "¥" row "`n"
+				vNum++ 
+        Try
+			  if ( oChild.accRole(2) = 20 ) {   
+          oStepchildren := Acc_Children(Acc_Children(oChild)[2])
+          for vNum2, oStepchild in oStepchildren {
+            name2 := oStepchild.accName(0)
+            if (name = name2)
+              Continue
+            str2 .= RepStr(A_Space,3) . Chr(0x25AA) " " name2 . "¥" . vNum . "¥" . 2 . "¥" vNum2 "`n"
+          }
+          name := Chr(0x25CF) " " name
+        }
+    	  str .= name "¥" vNum "¥" 1 "`n" . (str2 ? str2 : ""), str2 := ""
 			}
 		}
-	}
     return str
 }
 
-VivaldiFocusTabByNum(hWnd:="", vNum:="", row := "")
+RepStr( Str, Count ) { ; By SKAN / CD: 01-July-2017 | goo.gl/U84K7J
+Return StrReplace( Format( "{:0" Count "}", "" ), 0, Str )
+}
+
+/* 
+[class] imagebutton
+4.1.2.1.1.1.1.1.1.2.1.1.1.1.1
+4.1.2.1.1.1.1.1.1.2.1.1.1.1.2.1
+4.1.2.1.1.1.1.1.1.2.1.1.1.1.2.2
+ */
+
+
+
+VivaldiFocusTabByNum(hWnd:="", vNum:="", row := "", vNum2 := "")
 {
 	local
 	if !vNum
 		return
+  path := "4.1.2.1.1.1.1.1.1.2.1.1.1"
 	if (hWnd = "")
 		hWnd := WinExist("A")
+    tabRow := Acc_Get("Object", path, 0, "ahk_id" hwnd)
+    oChild := Acc_Children(tabRow)[vNum]
   if (row = 1) {
-    tabRow := Acc_Get("Object", "4.1.2.1.1.1.1.1.1.2.1.1.1", 0, "ahk_id" hwnd)
-    Acc_Children(tabRow)[vNum].accDoDefaultAction(0)
+    oChild.accDoDefaultAction(0)
   } else if (row = 2) {
-    tabRow2 := Acc_Get("Object", "4.1.2.1.1.1.1.1.1.2.2.1", 0, "ahk_id" hwnd)
-    Acc_Children(tabRow2)[vNum].accDoDefaultAction(0)
+    oChild := Acc_Children(oChild)[row]
+    oChild := Acc_Children(oChild)
+    oChild[vNum2].accDoDefaultAction(0)
   } else {
     vNum := ""
   }
+  clipboard := ";name:" name "`n;" path "." vNum "." row . (vNum2 ? "." vNum2 : "")
 	return vNum
 }
+
+
 
 ;==================================================
 
