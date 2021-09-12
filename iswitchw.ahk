@@ -1,16 +1,8 @@
 ;----------------------------------------------------------------------
+; ENSURE YOU'RE RUNNING WITH THE x64 VERSION OF AHK
+; FOR PROPER BROWSER TAB SUPPORT
 ;
-; NOTE: for browser tab support in Vivaldi, accessibility features must
-; be enabled by going to vivaldi://accessibility, and ensuring that both
-; "Native accessibility API support" & "Web accessibility" are enabled.
-; At present, only tabs positioned up top is supported.
-; 
-; Also, change the following settings for the best results:
-; Tabs > Tab Features > Minimize Active Tab: set to Off
-; Tabs > Tab Features > Tab Stacking: set to Compact
-;
-; A current limitation is that if the tab-bar gets too crowded, where the
-; text is no longer visible, it will no longer be able to locate the tabs
+; Vivaldi support is presently broken
 ;
 
 ;----------------------------------------------------------------------
@@ -19,7 +11,7 @@
 ;
 #SingleInstance force
 #NoTrayIcon
-#Include lib\Accv2.ahk
+#Include includes\Accv2.ahk
 
 ; Use small icons in the listview
 Global compact := true
@@ -37,9 +29,9 @@ Global hideScrollBars := true
 ; see readme in lib folder for details, use the included tcmatch.ahk to change settings
 ; By default, for different search modes, start the string with:
 ;   ? - for regex
-;   * - for srch
+;   * - for srch    
 ;   < - for simularity
-useTCMatch := true
+useTCMatch := false
 
 ; Activate the window if it's the only match
 activateOnlyMatch := false
