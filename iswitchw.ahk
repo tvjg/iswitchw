@@ -349,7 +349,7 @@ IncludedIn(haystack,needle)
 ;
 GetAllWindows()
 {
-  global switcher_id, filters, ChromeInst, Chromes
+  global switcher_id, filters
   windows := Object()
 
   top := DllCall("GetTopWindow", "Ptr","")
@@ -379,14 +379,14 @@ name := Chr(0x25CF) " " name
         tabs := StrSplit(JEE_FirefoxGetTabNames(next),"`n")
         for i, e in tabs
           windows.Push({"id":next, "title": e, "procName": "Firefox tab", "num": i})
-      } else if (procName = "vivaldi") {
-        tabs := StrSplit(VivaldiGetTabNames(next),"`n")
-        for i, e in tabs {
-          tab := StrSplit(e, "¥")
-          if !tab.1
-            continue
-          windows.Push({"id":next, "title": tab.1, "procName": "Vivaldi tab", "num": tab.2, "row": tab.3, "num2": tab.4})
-        }
+    ;   } else if (procName = "vivaldi") {
+    ;     tabs := StrSplit(VivaldiGetTabNames(next),"`n")
+    ;     for i, e in tabs {
+    ;       tab := StrSplit(e, "¥")
+    ;       if !tab.1
+    ;         continue
+    ;       windows.Push({"id":next, "title": tab.1, "procName": "Vivaldi tab", "num": tab.2, "row": tab.3, "num2": tab.4})
+    ;     }
       } Else {
         windows.Push({ "id": next, "title": title, "procName": procName })
       }
@@ -659,8 +659,8 @@ ActivateWindow(rowNum := "")
       JEE_ChromeFocusTabByNum(wid,num)
     Else If (procName = "Firefox tab")
       JEE_FirefoxFocusTabByNum(wid,num)
-    Else If (procName = "Vivaldi tab")
-      VivaldiFocusTabByNum(wid,num,window.row,window.num2)
+    ; Else If (procName = "Vivaldi tab")
+    ;   VivaldiFocusTabByNum(wid,num,window.row,window.num2)
     IfWinActive, ahk_id %wid%
     {
       WinGet, state, MinMax, ahk_id %wid%
@@ -742,14 +742,15 @@ DrawListView(windows)
       }
       if (iconHandle <> 0)
         iconNumber := DllCall("ImageList_ReplaceIcon", UInt, imageListID, Int, -1, UInt, iconHandle) + 1
-    } else if (procName ~= "(Chrome|Firefox|Vivaldi) tab" || isAppWindow || ( !ownerHwnd and !isToolWindow )) {
+    } else if (procName ~= "(Chrome|Firefox) tab" || isAppWindow || ( !ownerHwnd and !isToolWindow )) {
+    ; } else if (procName ~= "(Chrome|Firefox|Vivaldi) tab" || isAppWindow || ( !ownerHwnd and !isToolWindow )) {
       if !(iconHandle := window.icon) {
         if (procName = "Chrome tab") ; Apply the Chrome icon to found Chrome tabs
           wid := WinExist("ahk_exe chrome.exe")
         else if (procName = "Firefox tab")
           wid := WinExist("ahk_exe firefox.exe")
-        else if (procName = "Vivaldi tab")
-          wid := WinExist("ahk_exe vivaldi.exe")
+        ; else if (procName = "Vivaldi tab")
+        ;   wid := WinExist("ahk_exe vivaldi.exe")
         ; http://www.autohotkey.com/docs/misc/SendMessageList.htm
         WM_GETICON := 0x7F
 
@@ -993,9 +994,19 @@ WM_NCHITTEST(wParam, lParam)
     ; else let default hit-testing be done
 }
 
+VivaldiAccInit() {
+    static vTabs := 0
+    If !vTabs {
+        vTabs := JEE_AccGetTextAll(WinExist("ahk_exe vivaldi.exe"), "Menu", "push button")
+        vTabs := RegExReplace(vTabs, ".{3}$", "2.1.1.1")
+    }
+    return vTabs
+}
+
 ; Needs improvement, can currently only get tab names for stacked tab groups if they're visible/expanded
 VivaldiGetTabNames(hwnd) {
-    oAcc := Acc_Get("Object", "4.1.2.1.1.1.1.1.1.2.1.1.1", 0, "ahk_id" hwnd)
+    vTabs := VivaldiAccInit()
+    oAcc := Acc_Get("Object", vTabs, 0, "ahk_id" hwnd)
     oChildren := Acc_Children(oAcc)
 		for _, oChild in oChildren
 		{
@@ -1030,14 +1041,13 @@ Return StrReplace( Format( "{:0" Count "}", "" ), 0, Str )
 4.1.2.1.1.1.1.1.1.2.1.1.1.1.2.2
  */
 
-
-
 VivaldiFocusTabByNum(hWnd:="", vNum:="", row := "", vNum2 := "")
 {
 	local
 	if !vNum
 		return
-  path := "4.1.2.1.1.1.1.1.1.2.1.1.1"
+        
+    path := VivaldiAccInit()
 	if (hWnd = "")
 		hWnd := WinExist("A")
     tabRow := Acc_Get("Object", path, 0, "ahk_id" hwnd)
@@ -1090,12 +1100,16 @@ VivaldiFocusTabByNum(hWnd:="", vNum:="", row := "", vNum2 := "")
 
 JEE_ChromeAccInit(vValue)
 {
+    static vTabs := 0
+    chrome := WinExist("ahk_exe chrome.exe")
+    if !vTabs
+        vTabs := JEE_AccGetTextAll(chrome,,"page tab list") . ".1"
 	if (vValue = "U1")
 		return "4.1.2.1.2.5.2" ;address bar
 	if (vValue = "U2")
 		return "4.1.2.2.2.5.2" ;address bar
 	if (vValue = "T")
-		return "4.1.2.1.1.1" ;tabs (append '.1' to get the first tab)
+		return vTabs ? vTabs : 0 ;"4.1.2.1.1.1" ;tabs (append '.1' to get the first tab)
 }
 
 ;==================================================
@@ -1148,7 +1162,9 @@ JEE_ChromeGetTabCount(hWnd:="")
 JEE_ChromeGetTabNames(hWnd:="", vSep:="`n")
 {
 	local
-	static vAccPath := JEE_ChromeAccInit("T")
+	static vAccPath
+    if !vAccPath
+        vAccPath := JEE_ChromeAccInit("T")
 	if (hWnd = "")
 		hWnd := WinExist("A")
 	oAcc := Acc_Get("Object", vAccPath, 0, "ahk_id " hWnd)
@@ -1180,7 +1196,10 @@ JEE_ChromeGetTabNames(hWnd:="", vSep:="`n")
 JEE_ChromeFocusTabByNum(hWnd:="", vNum:="")
 {
 	local
-	static vAccPath := JEE_ChromeAccInit("T")
+	static vAccPath
+    if !vAccPath
+        vAccPath := JEE_ChromeAccInit("T")    
+	; static vAccPath := JEE_ChromeAccInit("T")
 	if (hWnd = "")
 		hWnd := WinExist("A")
 	if !vNum
@@ -1681,4 +1700,111 @@ TCMatch(aHaystack, aNeedle)
     return DllCall("lib\TCMatch64\MatchFileW", "WStr", aNeedle, "WStr", aHaystack)
   }
   return DllCall("lib\TCMatch\MatchFileW", "WStr", aNeedle, "WStr", aHaystack)
+}
+
+;Modified from original to allow searching for and returning a match for role, name and value, whichever are entered.
+JEE_AccGetTextAll(hWnd:=0, nameMatch := "", roleMatch := "", valMatch := "", vSep:="`n", vIndent:="`t", vOpt:="")
+{
+	vLimN := 20, vLimV := 20
+	Loop, Parse, vOpt, % " "
+	{
+		vTemp := A_LoopField
+		if (SubStr(vTemp, 1, 1) = "n")
+			vLimN := SubStr(vTemp, 2)
+		else if (SubStr(vTemp, 1, 1) = "v")
+			vLimV := SubStr(vTemp, 2)
+	}
+    matchList := Object()
+    if (nameMatch != "")
+        matchList.vName := nameMatch
+    if (roleMatch != "")
+        matchList.vRoleText := roleMatch
+    if (valMatch != "")
+        matchList.vValue  := valMatch
+    
+
+	oMem := {}, oPos := {}
+	;OBJID_WINDOW := 0x0
+	oMem[1, 1] := Acc_ObjectFromWindow(hWnd, 0x0)
+	oPos[1] := 1, vLevel := 1
+	VarSetCapacity(vOutput, 1000000*2)
+
+	Loop
+	{
+		if !vLevel
+			break
+		if !oMem[vLevel].HasKey(oPos[vLevel])
+		{
+			oMem.Delete(vLevel)
+			oPos.Delete(vLevel)
+			vLevelLast := vLevel, vLevel -= 1
+			oPos[vLevel]++
+			continue
+		}
+		oKey := oMem[vLevel, oPos[vLevel]]
+
+		vName := "", vValue := ""
+		if IsObject(oKey)
+		{
+			vRoleText := Acc_GetRoleText(oKey.accRole(0))
+			try vName := oKey.accName(0)
+			try vValue := oKey.accValue(0)
+		}
+		else
+		{
+			oParent := oMem[vLevel-1,oPos[vLevel-1]]
+			vChildId := IsObject(oKey) ? 0 : oPos[vLevel]
+			vRoleText := Acc_GetRoleText(oParent.accRole(vChildID))
+			try vName := oParent.accName(vChildID)
+			try vValue := oParent.accValue(vChildID)
+		}
+		if (StrLen(vName) > vLimN)
+			vName := SubStr(vName, 1, vLimN) "..."
+		if (StrLen(vValue) > vLimV)
+			vValue := SubStr(vValue, 1, vLimV) "..."
+		vName := RegExReplace(vName, "[`r`n]", " ")
+		vValue := RegExReplace(vValue, "[`r`n]", " ")
+
+		vAccPath := ""
+		if IsObject(oKey)
+		{
+			Loop, % oPos.Length() - 1
+				vAccPath .= (A_Index=1?"":".") oPos[A_Index+1]
+		}
+		else
+		{
+			Loop, % oPos.Length() - 2
+				vAccPath .= (A_Index=1?"":".") oPos[A_Index+1]
+			vAccPath .= " c" oPos[oPos.Length()]
+		}
+		vOutput .= vAccPath "`t" JEE_StrRept(vIndent, vLevel-1) vRoleText " [" vName "][" vValue "]" vSep
+
+        found := 0
+        If (matchList.Count() >= 1) {
+            for k, v in matchList
+                if InStr(%k%,v)
+                    found++
+            if (found = matchList.Count())
+                return vAccPath
+        }
+
+		oChildren := Acc_Children(oKey)
+		if !oChildren.Length()
+			oPos[vLevel]++
+		else
+		{
+			vLevelLast := vLevel, vLevel += 1
+			oMem[vLevel] := oChildren
+			oPos[vLevel] := 1
+		}
+	}
+	return matchList.Count() >= 1 ? 0 : SubStr(vOutput, 1, -StrLen(vSep))
+}
+
+JEE_StrRept(vText, vNum)
+{
+	if (vNum <= 0)
+		return
+	return StrReplace(Format("{:" vNum "}", ""), " ", vText)
+	;return StrReplace(Format("{:0" vNum "}", 0), 0, vText)
 }
