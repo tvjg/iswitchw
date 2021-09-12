@@ -11,7 +11,7 @@
 ;
 #SingleInstance force
 #NoTrayIcon
-#Include includes\Accv2.ahk
+#Include lib\Accv2.ahk
 
 ; Use small icons in the listview
 Global compact := true
