@@ -12,8 +12,6 @@ Built and tested using AutoHotkeyL v1.1.33.02 on Windows 10 (x64).
 
 ### Usage
 
-iswitchw strives to be as intuitive as possible.
-
 * `Capslock` activates iswitchw
 * `Esc` cancels at any time
 * `Tab/Shift + Tab` `Down/Up` `Ctrl + J/K` navigate next/previous row
@@ -24,12 +22,16 @@ iswitchw strives to be as intuitive as possible.
   if there's no further matches or only a single match: clear the input
 * `Ctrl + Left/Right` arrow keys skip forward/backward by the word
 * `Win + 0-9` focuses the corresponding tab
-* `1-99` hotstrings to focus any tab, enter the row number followed by
+* `1-300` hotstrings to focus any tab, enter the row number followed by
   a space.
 * Click a title to activate a window with the mouse
 * Any other typing should be passed through to the search
+* Start a search string with `?` to search using RegEX
+* Configure watched file folders or shortcuts to display in results
 
-Chrome and Firefox tabs will appear separately in the list.
+Chrome and Firefox tabs will appear separately in the list. In Chrome, accessibility
+support needs to be enabled for tabs to appear, by going to chrome://accessibility
+and checking every option under "Accessibility modes:" on the left side of the page.
 
 By default, iswitchw is restricted to a single instance and hides itself from
 the tray. Run the script again at any time to replace the running instance. If
@@ -51,6 +53,8 @@ User configurable options are presented at the top of the ahk script.
 
 ### History
 
+This fork is a significant departure from previous versions, aside 
+
 Original inspiration provided by the creators of the [iswitchb][iswitchb]
 package for the Emacs editor.
 
@@ -59,19 +63,7 @@ package for the Emacs editor.
 2011/06/11, MODIFIED by jixiuf               [[link][hist3]]  
 2013/08/23, MODIFIED by dirtyrottenscoundrel [[link][hist4]]  
 2014/05/30, MODIFIED by tvjg                 [[link][hist5]]
-
-My thanks to the previous contributors to this script. Without your work to
-lean on and learn from, I would have never started. My primary goals were to
-remove accumulated cruft and publish a version that could be easily forked.
-Previous implementations depended heavily on subroutines storing shared program
-state in undesignated globals.
-
-Gui and global variables (including user configurable options) were trimmed to
-a more reasonable minimum. Window icon display code was fixed for 64-bit
-versions of Windows. Approximate search matching a la ido/CtrlP was added. Code
-length was reduced significantly. When possible, I attempted to avoid old style
-AHK idioms (e.g.  EnvAdd, a%index%) in favor of code that would be more
-readable to the majority of programmers.
+2021/04/18, MODIFIED by evilmanimani
 
 [ido]: http://www.emacswiki.org/emacs/InteractivelyDoThings
 [ctrlp]: http://kien.github.io/ctrlp.vim/
