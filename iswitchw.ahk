@@ -4,14 +4,12 @@
 ;
 ; Vivaldi support is presently broken
 ;
+;
 
 ;----------------------------------------------------------------------
 ;
 ; User configuration
 ;
-#SingleInstance force
-#NoTrayIcon
-#Include lib\Accv2.ahk
 
 ; Use small icons in the listview
 Global compact := true
@@ -24,14 +22,15 @@ Global hideScrollBars := true
 
 ; Uses tcmatch.dll included with QuickSearch eXtended by Samuel Plentz
 ; https://www.ghisler.ch/board/viewtopic.php?t=22592
-; a bit slower, but supports Regex, Simularity, Srch & PinYin; use Winkey+/ to toggle it on/off
-; while iswitch is running, included in lib folder, no license info that I could find
+; Supports Regex, Simularity, Srch & PinYin
+; Included in lib folder, no license info that I could find
 ; see readme in lib folder for details, use the included tcmatch.ahk to change settings
 ; By default, for different search modes, start the string with:
 ;   ? - for regex
 ;   * - for srch    
 ;   < - for simularity
-useTCMatch := false
+; recommended '*' for fast fuzzy searching; you can set one of the other search modes as default here instead if destired
+DefaultTCSearch := "*" 
 
 ; Activate the window if it's the only match
 activateOnlyMatch := false
@@ -55,29 +54,6 @@ shortcutFolders := ["C:\Users\" A_UserName "\OneDrive\Desktop"
 ; it is disabled by default. 
 refreshEveryKeystroke := false
 
-; When true, filtered matches are scored and the best matches are presented
-; first. This helps account for simple spelling mistakes such as transposed
-; letters e.g. googel, vritualbox. When false, title matches are filtered and
-; presented in the order given by Windows.
-scoreMatches := true
-
-; Split search string on spaces and use each term as an additional
-; filter expression.
-;
-; For example, you are working on an AHK script:
-;  - There are two Explorer windows open to ~/scripts and ~/scripts-old.
-;  - Two Vim instances editing scripts in each one of those folders.
-;  - A browser window open that mentions scripts in the title
-;
-; This is amongst all the other stuff going on. You bring up iswitchw and
-; begin typing 'scrip'. Now, we have several best matches filtered.  But I
-; want the Vim windows only. Now I might be able to make a more unique match by
-; adding the extension of the file open in Vim: 'scripahk'. Pretty good, but
-; really the first thought was process name -- Vim. By breaking on space, we
-; can first filter the list for matches on 'scrip' for 'script' and then,
-; 'vim' in order to match by Vim amongst the remaining windows.
-useMultipleTerms := true
-
 ;----------------------------------------------------------------------
 ;
 ; Global variables
@@ -91,11 +67,15 @@ useMultipleTerms := true
 ;
 ;----------------------------------------------------------------------
 
-#NoEnv  ; Recommended for performance and compatibility with future AutoHotkey releases.
-; #Warn  ; Enable warnings to assist with detecting common errors.
-SendMode Input  ; Recommended for new scripts due to its superior speed and reliability.
-SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
-SetBatchLines -1 ; faster execution
+#SingleInstance force
+#NoTrayIcon
+#NoEnv
+SendMode Input
+SetWorkingDir %A_ScriptDir%
+SetBatchLines -1
+
+#Include lib\Accv2.ahk
+
 global switcher_id
 
 ; Load saved position from settings.ini
@@ -175,11 +155,6 @@ If hideWhenFocusLost
   SetTimer, HideTimer, 10
 Return
 
-#/::
-useTCMatch := !useTCMatch
-ToolTip, % "TC Match: " (useTCMatch ? "On" : "Off")
-SetTimer, tooltipOff, -2000
-Return
 
 tooltipOff:
   ToolTip
@@ -213,7 +188,9 @@ PgDn::        ;Jump down 4 rows
     Case "!F4":         Quit()
     Case "^h":          ControlSend, Edit1, {Backspace}, ahk_id %switcher_id%
     Case "~Delete", "~Backspace", "^Backspace", "^w":
-      If ( (windows.MaxIndex() < 1 && LV_GetCount() > 1) || LV_GetCount() = 1)
+      If (SubStr(search, 1, 1) != "?"
+      && DefaultTCSearch != "?"
+      && ((windows.MaxIndex() < 1 && LV_GetCount() > 1) || LV_GetCount() = 1))
         GuiControl, , Edit1,
       Else If (A_ThisHotkey = "^Backspace" || A_ThisHotkey = "^w")
         ControlSend, Edit1, ^+{left}{Backspace}, ahk_id %switcher_id%
@@ -272,6 +249,10 @@ Quit() {
 ;
 ; Runs whenever Edit control is updated
 SearchChange:
+  Gui, Submit, NoHide
+  if ((search ~= "^\d+")
+  || (StrLen(search) = 1 && SubStr(search, 1, 1) ~= "[?*<]"))
+    return  
   Settimer, Refresh, -1
 Return
 
@@ -280,12 +261,8 @@ Refresh:
     Gui, Font, c90ee90fj
     GuiControl, Font, Edit1
   }
-  Gui, Submit, NoHide
   StartTime := A_TickCount
-  If useTCMatch
-    RefreshWindowList()
-  Else
-    RefreshWindowListOld()
+  RefreshWindowList()
   ElapsedTime := A_TickCount - StartTime
   If (LV_GetCount() > 1) {
     Gui, Font, % LV_GetCount() > 1 && windows.MaxIndex() < 1 ? "cff2626" : "cEEE8D5"
@@ -295,7 +272,7 @@ Refresh:
     GuiControl, Font, Edit1
   }
   For i, e in windows {
-    str .= Format("{:-4} {:-15} {:-55}Score: {}`n",A_Index ":",SubStr(e.procName,1,14),StrLen(e.title) > 50 ? SubStr(e.title,1,50) "..." : e.title,e.score)
+    str .= Format("{:-4} {:-15} {:-55}`n",A_Index ":",SubStr(e.procName,1,14),StrLen(e.title) > 50 ? SubStr(e.title,1,50) "..." : e.title)
   }
   if search
   OutputDebug, % "lvcount: " LV_GetCount() " - windows: " windows.MaxIndex()
@@ -313,7 +290,7 @@ ListViewClick:
   if (A_GuiControlEvent = "Normal") {
     ActivateWindow()
   }
-  return
+return
 
 ;----------------------------------------------------------------------
 ;
@@ -333,17 +310,15 @@ IncludedIn(haystack,needle)
   }
 
   return -1
-}
+} 
 
 ;----------------------------------------------------------------------
 ;
 ; Fetch info on all active windows
 ;
-GetAllWindows()
-{
+GetAllWindows() {
   global switcher_id, filters
   windows := Object()
-
   top := DllCall("GetTopWindow", "Ptr","")
   Loop {
   	next :=	DllCall("GetWindow", "Ptr", (A_Index = 1 ? top : next),"uint",2)
@@ -360,12 +335,6 @@ GetAllWindows()
           if RegExMatch(e, "i)(.*) - Part of.*group\s?(.*)", match) ; appends group name to grouped tabs
             e := (match2 ? match2 : "Group") . " " . Chr(0x2022) . " " . match1
           windows.Push({"id":next, "title": e, "procName": "Chrome tab", "num": i})
-
-/* 
-str2 .= RepStr(A_Space,3) . Chr(0x25AA) " " oStepchild.accName(0) . "¥" . vNum . "¥" . 2 . "¥" vNum2 "`n"
-name := Chr(0x25CF) " " name
-*/
-
         }
       } else if (procName = "firefox") {
         tabs := StrSplit(JEE_FirefoxGetTabNames(next),"`n")
@@ -391,11 +360,9 @@ name := Chr(0x25CF) " " name
 RefreshWindowList() {
   global allwindows, windows, scoreMatches, fileList
   global search, lastSearch, refreshEveryKeystroke
-  if (search ~= "^\d+")
-    return  
   windows := []
   toRemove := ""
-  If (!search || refreshEveryKeystroke || StrLen(search) < StrLen(lastSearch)) {
+  If (DefaultTCSearch = "?" || SubStr(search, 1, 1) = "?" ||  !search || refreshEveryKeystroke || StrLen(search) < StrLen(lastSearch)) {
     allwindows := GetAllWindows()
     for _, e in fileList {
       path := e.path 
@@ -408,224 +375,19 @@ RefreshWindowList() {
   for i, e in allwindows {
     str := e.procName " " e.title
     if !search || TCMatch(str,search) {
-      If scoreMatches
-        e.score := FuzzySearch(search, str)
       windows.Push(e)
     } else {
       toRemove .= i ","
     }
   }
-  If scoreMatches
-    windows := objectSort(windows, "score")
   OutputDebug, % "Allwindows count: " allwindows.MaxIndex() " | windows count: " windows.MaxIndex() "`n"
   DrawListView(windows)
   for i, e in StrSplit(toRemove,",")
     allwindows.Delete(e)
 }
 
-/* ObjectSort() by bichlepa
-* 
-* Description:
-*    Reads content of an object and returns a sorted array
-* 
-* Parameters:
-*    obj:              Object which will be sorted
-*    keyName:          [optional] 
-*                      Omit it if you want to sort a array of strings, numbers etc.
-*                      If you have an array of objects, specify here the key by which contents the object will be sorted.
-*    callBackFunction: [optional] Use it if you want to have custom sort rules.
-*                      The function will be called once for each value. It must return a number or string.
-*    reverse:          [optional] Pass true if the result array should be reversed
-*/
+ActivateWindow(rowNum := "") {
 
-objectSort(obj, keyName="", callbackFunc="", reverse=false)
-{
-    temp := Object()
-    sorted := Object() ;Return value
-
-    for oneKey, oneValue in obj
-    {
-        ;Get the value by which it will be sorted
-        if keyname
-            value := oneValue[keyName]
-        else
-            value := oneValue
-
-        ;If there is a callback function, call it. The value is the key of the temporary list.
-        if (callbackFunc)
-            tempKey := %callbackFunc%(value)
-        else
-            tempKey := value
-
-        ;Insert the value in the temporary object.
-        ;It may happen that some values are equal therefore we put the values in an array.
-        if not isObject(temp[tempKey])
-            temp[tempKey] := []
-        temp[tempKey].push(oneValue)
-    }
-
-    ;Now loop throuth the temporary list. AutoHotkey sorts them for us.
-    for oneTempKey, oneValueList in temp
-    {
-        for oneValueIndex, oneValue in oneValueList
-        {
-            ;And add the values to the result list
-            if (reverse)
-                sorted.insertAt(1,oneValue)
-            else
-                sorted.push(oneValue)
-        }
-    }
-
-    return sorted
-}
-
-;----------------------------------------------------------------------
-;
-; Refresh the list of windows according to the search criteria
-;
-RefreshWindowListOld()
-{
-  global allwindows, windows
-  global search, lastSearch, refreshEveryKeystroke
-  if (search ~= "^\d+")
-    return
-  uninitialized := (allwindows.MinIndex() = "")
-
-  if (uninitialized || refreshEveryKeystroke)
-    allwindows := GetAllWindows()
-
-  currentSearch := Trim(search)
-  if ((currentSearch == lastSearch) && !uninitialized) {
-    return
-  }
-
-  ; When adding to criteria (ie typing, not erasing), refilter
-  ; the existing filtered list. This should be sane since the even if we enter
-  ; a new letter at the beginning of the search term, all shown matches should
-  ; still contain the previous search term as a 'substring'.
-  useExisting := (StrLen(currentSearch) > StrLen(lastSearch))
-  lastSearch := currentSearch
-
-  windows := FilterWindowList(useExisting ? windows : allwindows, currentSearch)
-
-  DrawListView(windows)
-}
-
-;----------------------------------------------------------------------
-;
-; Filter window list with given search criteria
-;
-FilterWindowList(list, criteria)
-{
-  global scoreMatches, useMultipleTerms
-  filteredList := Object(), expressions := Object()
-  lastTermInSearch := criteria, doScore := scoreMatches
-
-  ; If useMultipleTerms, do multiple passes with filter expressions
-  if (useMultipleTerms) {
-    StringSplit, searchTerms, criteria, %A_space%
-
-    Loop, %searchTerms0%
-    {
-      term := searchTerms%A_index%
-      lastTermInSearch := term
-
-      expr := BuildFilterExpression(term)
-      expressions.Insert(expr)
-    }
-  } else if (criteria <> "") {
-    expr := BuildFilterExpression(criteria)
-    expressions[0] := expr
-  }
-
-  atNextWindow:
-  For idx, window in list
-  {
-    ; if there is a search string
-    if criteria <>
-    {
-      title := window.title
-      procName := window.procName
-
-      ; don't add the windows not matching the search string
-      titleAndProcName = %procName% %title%
-
-      For idx, expr in expressions
-      {
-        if RegExMatch(titleAndProcName, expr) = 0
-          continue atNextWindow
-      }
-    }
-
-    doScore := scoreMatches && (criteria <> "") && (lastTermInSearch <> "")
-    window["score"] := doScore ? FuzzySearch(lastTermInSearch, titleAndProcName) : 0
-
-    filteredList.Insert(window)
-  }
-  
-  return (doScore ? SortByScore(filteredList) : filteredList)
-}
-;----------------------------------------------------------------------
-;
-; http://stackoverflow.com/questions/2891514/algorithms-for-fuzzy-matching-strings
-;
-; Matching in the style of Ido/CtrlP
-;
-; Returns:
-;   Regex for provided search term 
-;
-; Example:
-;   explr builds the regex /[^e]*e[^x]*x[^p]*p[^l]*l[^r]*r/i
-;   which would match explorer
-;   or likewise
-;   explr ahk
-;   which would match Explorer - ~/autohotkey, but not Explorer - Documents
-;
-; Rules:
-;  It is expected that all the letters of the input be in the keyword
-;  It is expected that the letters in the input be in the same order in the keyword
-;  The list of keywords returned should be presented in a consistent (reproductible) order
-;  The algorithm should be case insensitive
-;
-
-BuildFilterExpression(term) {
-  expr := "i)"
-  for _, character in StrSplit(term)
-    expr .= "[^" . character . "]*" . character
-  return expr
-}
-
-;------------------------------------------------------------------------
-;
-; Perform insertion sort on list, comparing on each item's score property 
-;
-SortByScore(list)
-{
-  Loop % list.MaxIndex() - 1
-  {
-    i := A_Index+1
-    window := list[i]
-    j := i-1
-
-    While j >= 0 and list[j].score > window.score
-    {
-      list[j+1] := list[j]
-      j--
-    }
-
-    list[j+1] := window
-  }
-
-return list
-}
-
-;----------------------------------------------------------------------
-;
-; Activate selected window
-;
-ActivateWindow(rowNum := "")
-{
   global windows, ChromeInst
 
   If !rowNum  
@@ -641,11 +403,8 @@ ActivateWindow(rowNum := "")
   url := window.url
   num := window.num
   path := window.path
-  ; In some cases, calling WinMinimize minimizes the window, but it retains its
-  ; focus preventing WinActivate from raising window.
   If window.HasKey("path") {
-    ; SplitPath, path, , OutDir
-    Run, % """" path """" ;, % OutDir
+    Run, % """" path """" 
   } Else {
     If (procName = "Chrome tab")
       JEE_ChromeFocusTabByNum(wid,num)
@@ -671,8 +430,7 @@ ActivateWindow(rowNum := "")
 ;
 ; Add window list to listview
 ;
-DrawListView(windows)
-{
+DrawListView(windows) {
   Global switcher_id, fileList
   static IconArray
   If !IsObject(IconArray)
@@ -687,8 +445,9 @@ DrawListView(windows)
   LV_Delete()
   iconCount = 0
   removedRows := Array()
-  For idx, window in windows
-  {
+  GuiControl, -Redraw, list
+  For idx, window in windows {
+
     wid := window.id
     title := window.title
     procName := window.procName
@@ -750,22 +509,15 @@ DrawListView(windows)
         ICON_BIG := 1
         ICON_SMALL2 := 2
         ICON_SMALL := 0
-
         SendMessage, WM_GETICON, ICON_BIG, 0, , ahk_id %wid%
         iconHandle := ErrorLevel
-
-        if (iconHandle = 0)
-        {
+        if (iconHandle = 0) {
           SendMessage, WM_GETICON, ICON_SMALL2, 0, , ahk_id %wid%
           iconHandle := ErrorLevel
-
-          if (iconHandle = 0)
-          {
+          if (iconHandle = 0) {
             SendMessage, WM_GETICON, ICON_SMALL, 0, , ahk_id %wid%
             iconHandle := ErrorLevel
-
-            if (iconHandle = 0)
-            {
+            if (iconHandle = 0) {
               ; http://msdn.microsoft.com/en-us/library/windows/desktop/ms633581(v=vs.85).aspx
               ; To write code that is compatible with both 32-bit and 64-bit
               ; versions of Windows, use GetClassLongPtr. When compiling for 32-bit
@@ -773,10 +525,8 @@ DrawListView(windows)
               ; function.
               iconHandle := DllCall("GetClassLongPtr", "uint", wid, "int", -14) ; GCL_HICON is -14
 
-              if (iconHandle = 0)
-              {
+              if (iconHandle = 0) {
                 iconHandle := DllCall("GetClassLongPtr", "uint", wid, "int", -34) ; GCL_HICONSM is -34
-
                 if (iconHandle = 0) {
                   iconHandle := DllCall("LoadIcon", "uint", 0, "uint", 32512) ; IDI_APPLICATION is 32512
                 }
@@ -789,13 +539,11 @@ DrawListView(windows)
         iconNumber := DllCall("ImageList_ReplaceIcon", UInt, imageListID, Int, -1, UInt, iconHandle) + 1
         window.icon := iconHandle
       }
-
     } else {
       WinGetClass, Win_Class, ahk_id %wid%
       if Win_Class = #32770 ; fix for displaying control panel related windows (dialog class) that aren't on taskbar
         iconNumber := IL_Add(imageListID, "C:\WINDOWS\system32\shell32.dll", 217) ; generic control panel icon
     }
-
     if (iconNumber < 1) {
       removedRows.Insert(idx)
     } else {
@@ -803,11 +551,11 @@ DrawListView(windows)
       LV_Add("Icon" . iconNumber, iconCount, window.procName, title, tab)
     }
   }
+  GuiControl, +Redraw, list
 
   ; Don't draw rows without icons.
   windowCount-=removedRows.MaxIndex()
-  For key,rowNum in removedRows
-  {
+  For key,rowNum in removedRows {
     windows.RemoveAt(rowNum)
   }
 
@@ -833,94 +581,6 @@ GetProcessName(wid)
   }
 
   return name
-}
-
-; Wrapper for Strdiff, returns better results, found somewhere on the forum, can't recall where though
-FuzzySearch(string1, string2)
-{
-	lenl := StrLen(string1)
-	lens := StrLen(string2)
-	if(lenl > lens)
-	{
-		shorter := string2
-		longer := string1
-	}
-	else if(lens > lenl)
-	{
-		shorter := string1
-		longer := string2
-		lens := lenl
-		lenl := StrLen(string2)
-	}
-	else
-		return StrDiff(string1, string2)
-	min := 1
-	Loop % lenl - lens + 1
-	{
-		distance := StrDiff(shorter, SubStr(longer, A_Index, lens))
-		if(distance < min)
-			min := distance
-	}
-	return min
-}
-
-
-/*
-https://gist.github.com/grey-code/5286786
-
-By Toralf:
-Forum thread: http://www.autohotkey.com/board/topic/54987-sift3-super-fast-and-accurate-string-distance-algorithm/#entry345400
-
-Basic idea for SIFT3 code by Siderite Zackwehdex
-http://siderite.blogspot.com/2007/04/super-fast-and-accurate-string-distance.html
-
-Took idea to normalize it to longest string from Brad Wood
-http://www.bradwood.com/string_compare/
-
-Own work:
-- when character only differ in case, LSC is a 0.8 match for this character
-- modified code for speed, might lead to different results compared to original code
-- optimized for speed (30% faster then original SIFT3 and 13.3 times faster than basic Levenshtein distance)
-*/
-
-;----------------------------------------------------------------------
-;
-; returns a float: between "0.0 = identical" and "1.0 = nothing in common"
-;
-StrDiff(str1, str2, maxOffset:=5) {
-  if (str1 = str2)
-    return (str1 == str2 ? 0/1 : 0.2/StrLen(str1))
-
-  if (str1 = "" || str2 = "")
-    return (str1 = str2 ? 0/1 : 1/1)
-
-  StringSplit, n, str1
-  StringSplit, m, str2
-
-  ni := 1, mi := 1, lcs := 0
-  while ((ni <= n0) && (mi <= m0)) {
-    if (n%ni% == m%mi%)
-      lcs++
-    else if (n%ni% = m%mi%)
-      lcs += 0.8
-    else {
-      Loop, % maxOffset {
-        oi := ni + A_Index, pi := mi + A_Index
-        if ((n%oi% = m%mi%) && (oi <= n0)) {
-          ni := oi, lcs += (n%oi% == m%mi% ? 1 : 0.8)
-          break
-        }
-        if ((n%ni% = m%pi%) && (pi <= m0)) {
-          mi := pi, lcs += (n%ni% == m%pi% ? 1 : 0.8)
-          break
-        }
-      }
-    }
-
-    ni++, mi++
-  }
-
-  return ((n0 + m0)/2 - lcs) / (n0 > m0 ? n0 : m0)
 }
 
 ; Allows dragging the window position
@@ -1033,8 +693,7 @@ Return StrReplace( Format( "{:0" Count "}", "" ), 0, Str )
 4.1.2.1.1.1.1.1.1.2.1.1.1.1.2.2
  */
 
-VivaldiFocusTabByNum(hWnd:="", vNum:="", row := "", vNum2 := "")
-{
+VivaldiFocusTabByNum(hWnd:="", vNum:="", row := "", vNum2 := "") {
 	local
 	if !vNum
 		return
@@ -1059,35 +718,6 @@ VivaldiFocusTabByNum(hWnd:="", vNum:="", row := "", vNum2 := "")
 
 
 
-;==================================================
-
-;Chrome functions suite (tested on Chrome v77):
-
-;requires Acc.ahk:
-;Acc library (MSAA) and AccViewer download links - AutoHotkey Community
-;https://autohotkey.com/boards/viewtopic.php?f=6&t=26201
-
-;JEE_ChromeAccInit(vValue)
-;JEE_ChromeGetUrl(hWnd:="", vOpt:="")
-;JEE_ChromeGetTabCount(hWnd:="")
-;JEE_ChromeGetTabNames(hWnd:="", vSep:="`n")
-;JEE_ChromeFocusTabByNum(hWnd:="", vNum:="")
-;JEE_ChromeFocusTabByName(hWnd:="", vTitle:="", vNum:="")
-;JEE_ChromeGetFocusedTabNum(hWnd:="")
-;JEE_ChromeAddressBarIsFoc(hWnd:="")
-;JEE_ChromeCloseOtherTabs(hWnd:="", vOpt:="", vNum:="")
-
-;note: you can only get the url for the *active* tab via Acc,
-;to get the urls for other tabs, you could use a browser extension, see:
-;Firefox/Chrome: copy titles/urls to the clipboard - AutoHotkey Community
-;https://autohotkey.com/boards/viewtopic.php?f=22&t=66246
-
-;==================================================
-
-;note: these Acc paths often change:
-;Acc paths determined via:
-;[JEE_AccGetTextAll function]
-;Acc: get text from all window/control elements - AutoHotkey Community
 ;https://autohotkey.com/boards/viewtopic.php?f=6&t=40615
 
 JEE_ChromeAccInit(vValue)
@@ -1103,53 +733,6 @@ JEE_ChromeAccInit(vValue)
 	if (vValue = "T")
 		return vTabs ? vTabs : 0 ;"4.1.2.1.1.1" ;tabs (append '.1' to get the first tab)
 }
-
-;==================================================
-
-JEE_ChromeGetUrl(hWnd:="", vOpt:="")
-{
-	local
-	static vAccPath1 := JEE_ChromeAccInit("U1")
-	static vAccPath2 := JEE_ChromeAccInit("U2")
-	if (hWnd = "")
-		hWnd := WinExist("A")
-	oAcc := Acc_Get("Object", vAccPath1, 0, "ahk_id " hWnd)
-	if !IsObject(oAcc)
-	|| !(oAcc.accName(0) = "Address and search bar")
-		oAcc := Acc_Get("Object", vAccPath2, 0, "ahk_id " hWnd)
-	vUrl := oAcc.accValue(0)
-	oAcc := ""
-
-	if InStr(vOpt, "x")
-	{
-		if !(vUrl = "") && !InStr(vUrl, "://")
-			vUrl := "http://" vUrl
-	}
-	return vUrl
-}
-
-;==================================================
-
-JEE_ChromeGetTabCount(hWnd:="")
-{
-	local
-	static vAccPath := JEE_ChromeAccInit("T")
-	if (hWnd = "")
-		hWnd := WinExist("A")
-	oAcc := Acc_Get("Object", vAccPath, 0, "ahk_id " hWnd)
-	vCount := 0
-	for _, oChild in Acc_Children(oAcc)
-	{
-		;ROLE_SYSTEM_PUSHBUTTON := 0x2B
-		if (oChild.accRole(0) = 0x2B)
-			continue
-		vCount++
-	}
-	oAcc := oChild := ""
-	return vCount
-}
-
-;==================================================
 
 JEE_ChromeGetTabNames(hWnd:="", vSep:="`n")
 {
@@ -1232,201 +815,6 @@ JEE_ChromeFocusTabByName(hWnd:="", vTitle:="", vNum:="")
 	return vRet
 }
 
-;==================================================
-
-JEE_ChromeGetFocusedTabNum(hWnd:="")
-{
-	local
-	static vAccPath := JEE_ChromeAccInit("T")
-	if (hWnd = "")
-		hWnd := WinExist("A")
-	oAcc := Acc_Get("Object", vAccPath, 0, "ahk_id " hWnd)
-	vRet := 0
-	for _, oChild in Acc_Children(oAcc)
-	{
-		;STATE_SYSTEM_SELECTED := 0x2
-		if (oChild.accState(0) & 0x2)
-		{
-			vRet := A_Index
-			break
-		}
-	}
-	oAcc := oChild := ""
-	return vRet
-}
-
-;==================================================
-
-JEE_ChromeAddressBarIsFoc(hWnd:="")
-{
-	local
-	static vAccPath1 := JEE_ChromeAccInit("U1")
-	static vAccPath2 := JEE_ChromeAccInit("U2")
-	if (hWnd = "")
-		hWnd := WinExist("A")
-	oAcc := Acc_Get("Object", vAccPath1, 0, "ahk_id " hWnd)
-	if !IsObject(oAcc)
-	|| !(oAcc.accName(0) = "Address and search bar")
-		oAcc := Acc_Get("Object", vAccPath2, 0, "ahk_id " hWnd)
-	;STATE_SYSTEM_FOCUSED := 0x4
-	vIsFoc := !!(oAcc.accState(0) & 0x4)
-	oAcc := ""
-	return vIsFoc
-}
-
-;==================================================
-
-;vOpt: L (close tabs to the left)
-;vOpt: R (close tabs to the right)
-;vOpt: LR (close other tabs)
-;vOpt: (blank) (close other tabs)
-;vNum: specify a tab other than the focused tab
-JEE_ChromeCloseOtherTabs(hWnd:="", vOpt:="", vNum:="")
-{
-	local
-	static vAccPath := JEE_ChromeAccInit("T")
-	if (hWnd = "")
-		hWnd := WinExist("A")
-	if (vNum = "")
-		vNum := JEE_ChromeGetFocusedTabNum(hWnd)
-	if (vOpt = "")
-		vOpt := "LR"
-	vDoCloseLeft := !!InStr(vOpt, "L")
-	vDoCloseRight := !!InStr(vOpt, "R")
-
-	oAcc := Acc_Get("Object", vAccPath, 0, "ahk_id " hWnd)
-	vRet := 0
-	oChildren := Acc_Children(oAcc)
-	vIndex := oChildren.Length() + 1
-	Loop % vIndex - 1
-	{
-		vIndex--
-		oChild := oChildren[vIndex]
-		;ROLE_SYSTEM_PUSHBUTTON := 0x2B
-		if (oChild.accRole(0) = 0x2B)
-			continue
-		if (vIndex = vNum)
-			continue
-		if (vIndex > vNum) && !vDoCloseRight
-			continue
-		if (vIndex < vNum) && !vDoCloseLeft
-			continue
-		oChild2 := Acc_Children(oChild).4
-		if (oChild2.accName(0) = "Close")
-			oChild2.accDoDefaultAction(0)
-		oChild2 := ""
-	}
-	oAcc := oChild := ""
-	return vRet
-}
-
-;==================================================
-
-;Firefox functions suite (tested on Firefox v69):
-
-;requires Acc.ahk:
-;Acc library (MSAA) and AccViewer download links - AutoHotkey Community
-;https://autohotkey.com/boards/viewtopic.php?f=6&t=26201
-
-;JEE_FirefoxAccInit(vValue)
-;JEE_FirefoxGetUrl(hWnd:="", vOpt:="")
-;JEE_FirefoxGetTabCount(hWnd:="")
-;JEE_FirefoxGetTabNames(hWnd:="", vSep:="`n")
-;JEE_FirefoxFocusTabByNum(hWnd:="", vNum:="")
-;JEE_FirefoxFocusTabByName(hWnd:="", vTitle:="", vNum:="")
-;JEE_FirefoxGetFocusedTabNum(hWnd:="")
-;JEE_FirefoxAddressBarIsFoc(hWnd:="")
-;JEE_FirefoxCloseOtherTabs(hWnd:="", vOpt:="", vNum:="")
-
-;warning: JEE_FirefoxCloseOtherTabs:
-;there is no separate Close button Acc element to do accDoDefaultAction on,
-;so at present, each tab is focused, and Ctrl+W is sent to it, which is unreliable
-
-;note: you can only get the url for the *active* tab via Acc,
-;to get the urls for other tabs, you could use a browser extension, see:
-;Firefox/Chrome: copy titles/urls to the clipboard - AutoHotkey Community
-;https://autohotkey.com/boards/viewtopic.php?f=22&t=66246
-
-;==================================================
-
-;note: this function is redundant
-;note: an equivalent function is needed for Chrome
-JEE_FirefoxAccInit(vValue)
-{
-	local
-}
-
-;==================================================
-
-JEE_FirefoxGetUrl(hWnd:="", vOpt:="")
-{
-	local
-	if (hWnd = "")
-		hWnd := WinExist("A")
-	Loop 10
-	{
-		vIndex := A_Index
-		vAccPath := "application.tool_bar3.combo_box1.editable_text"
-		;vAccPath := "4.25.3.2"
-		if InStr(vOpt, "p") ;(pop-up window)
-			vAccPath := "application.tool_bar1.combo_box1.editable_text"
-		oAcc := Acc_Get("Object", vAccPath, 0, "ahk_id " hWnd)
-		if !ErrorLevel
-			break
-		;Sleep(100)
-		DllCall("kernel32\Sleep", "UInt",100)
-	}
-	if (vIndex = 10)
-		return
-
-	vUrl := ""
-	try vUrl := oAcc.accValue(0)
-	oAcc := ""
-
-	if InStr(vOpt, "x")
-	{
-		if !(vUrl = "") && !InStr(vUrl, "://")
-			vUrl := "http://" vUrl
-	}
-	return vUrl
-}
-
-;==================================================
-
-JEE_FirefoxGetTabCount(hWnd:="")
-{
-	local
-	if (hWnd = "")
-		hWnd := WinExist("A")
-	oAcc := Acc_Get("Object", "4", 0, "ahk_id " hWnd)
-	vRet := 0
-	for _, oChild in Acc_Children(oAcc)
-	{
-		if (oChild.accName(0) == "Browser tabs")
-		{
-			oAcc := Acc_Children(oChild).1, vRet := 1
-			break
-		}
-	}
-	if !vRet
-	{
-		oAcc := oChild := ""
-		return
-	}
-
-	vCount := 0
-	for _, oChild in Acc_Children(oAcc)
-	{
-		;ROLE_SYSTEM_PUSHBUTTON := 0x2B
-		if (oChild.accRole(0) = 0x2B)
-			continue
-		vCount++
-	}
-	oAcc := oChild := ""
-	return vCount
-}
-
-;==================================================
 
 JEE_FirefoxGetTabNames(hWnd:="", vSep:="`n")
 {
@@ -1541,152 +929,17 @@ JEE_FirefoxFocusTabByName(hWnd:="", vTitle:="", vNum:="")
 
 ;==================================================
 
-JEE_FirefoxGetFocusedTabNum(hWnd:="")
-{
-	local
-	if (hWnd = "")
-		hWnd := WinExist("A")
-	oAcc := Acc_Get("Object", "4", 0, "ahk_id " hWnd)
-	vRet := 0
-	for _, oChild in Acc_Children(oAcc)
-	{
-		if (oChild.accName(0) == "Browser tabs")
-		{
-			oAcc := Acc_Children(oChild).1, vRet := 1
-			break
-		}
-	}
-	if !vRet
-	{
-		oAcc := oChild := ""
-		return
-	}
-
-	vRet := 0
-	for _, oChild in Acc_Children(oAcc)
-	{
-		;STATE_SYSTEM_SELECTED := 0x2
-		if (oChild.accState(0) & 0x2)
-		{
-			vRet := A_Index
-			break
-		}
-	}
-	oAcc := oChild := ""
-	return vRet
-}
-
-;==================================================
-
-JEE_FirefoxAddressBarIsFoc(hWnd:="")
-{
-	local
-	if (hWnd = "")
-		hWnd := WinExist("A")
-	oAcc := Acc_Get("Object", "4", 0, "ahk_id " hWnd)
-	vRet := 0
-	for _, oChild in Acc_Children(oAcc)
-	{
-		if (oChild.accName(0) == "Navigation Toolbar")
-			oAcc := oChild, vRet := 1
-	}
-	if !vRet
-	{
-		oAcc := oChild := ""
-		return
-	}
-
-	oAcc := Acc_Children(oAcc).6
-	oAcc := Acc_Children(oAcc).2
-	;STATE_SYSTEM_FOCUSED := 0x4
-	vIsFoc := !!(oAcc.accState(0) & 0x4)
-	oAcc := oChild := ""
-	return vIsFoc
-}
-
-;==================================================
-
-;vOpt: L (close tabs to the left)
-;vOpt: R (close tabs to the right)
-;vOpt: LR (close other tabs)
-;vOpt: (blank) (close other tabs)
-;vNum: specify a tab other than the focused tab
-JEE_FirefoxCloseOtherTabs(hWnd:="", vOpt:="", vNum:="")
-{
-	local
-	if (hWnd = "")
-		hWnd := WinExist("A")
-	;vWinClass := WinGetClass("ahk_id " hWnd)
-	WinGetClass, vWinClass, % "ahk_id " hWnd
-	if !(vWinClass = "MozillaWindowClass")
-		return
-	if (vNum = "")
-		vNum := JEE_FirefoxGetFocusedTabNum(hWnd)
-	if (vOpt = "")
-		vOpt := "LR"
-	vDoCloseLeft := !!InStr(vOpt, "L")
-	vDoCloseRight := !!InStr(vOpt, "R")
-
-	oAcc := Acc_Get("Object", "4", 0, "ahk_id " hWnd)
-	vRet := 0
-	for _, oChild in Acc_Children(oAcc)
-	{
-		if (oChild.accName(0) == "Browser tabs")
-		{
-			oAcc := Acc_Children(oChild).1, vRet := 1
-			break
-		}
-	}
-	if !vRet
-	{
-		oAcc := oChild := ""
-		return
-	}
-
-	vRet := 0
-	oChildren := Acc_Children(oAcc)
-	vIndex := oChildren.Length() + 1
-	Loop % vIndex - 1
-	{
-		vIndex--
-		oChild := oChildren[vIndex]
-		;ROLE_SYSTEM_PUSHBUTTON := 0x2B
-		try
-		{
-			if (oChild.accRole(0) = 0x2B)
-				continue
-		}
-		if (vIndex = vNum)
-			continue
-		if (vIndex > vNum) && !vDoCloseRight
-			continue
-		if (vIndex < vNum) && !vDoCloseLeft
-			continue
-		;note: cf. Chrome, Firefox doesn't have a separate Close button element
-		;oChild2 := Acc_Children(oChild).4
-		;if (oChild2.accName(0) = "Close")
-		;	oChild2.accDoDefaultAction(0)
-		;oChild2 := ""
-		;instead we focus each tab and send Ctrl+W to it
-		JEE_FirefoxFocusTabByNum(hWnd, vIndex)
-		;Sleep(500)
-		DllCall("kernel32\Sleep", "UInt",500)
-		;ControlSend("{Ctrl down}w{Ctrl up}",, "ahk_id " hWnd)
-		ControlSend, ahk_parent, {Ctrl down}w{Ctrl up}, % "ahk_id " hWnd
-	}
-	oAcc := oChild := ""
-	return vRet
-}
-
-;==================================================
-
 TCMatch(aHaystack, aNeedle)
 {
-  chars := "/\[^$.|?*+(){}"
-  for i, e in StrSplit(chars)
-    aHaystack := StrReplace(aHaystack, e, A_Space)
-  ; If !RegExMatch(aNeedle, "^[*?<]")
-    ; aNeedle := "*" aNeedle
+  global DefaultTCSearch
+
+  if (SubStr(aNeedle, 1, 1) != "?" && DefaultTCSearch != "?" )  {
+    for i, e in StrSplit("/\[^$.|?*+(){}")
+      aHaystack := StrReplace(aHaystack, e, A_Space)
+  }
+  If ( aNeedle ~= "^[^\?<*]" && DefaultTCSearch )
+    aNeedle := DefaultTCSearch . aNeedle
+  OutputDebug, % aNeedle "`n"
   if (A_PtrSize == 8)
   {
     return DllCall("lib\TCMatch64\MatchFileW", "WStr", aNeedle, "WStr", aHaystack)
